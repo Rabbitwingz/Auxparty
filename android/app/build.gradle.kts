@@ -13,14 +13,14 @@ val relayUrl: String = providers.gradleProperty("relayUrl").get()
 val webUrl: String = providers.gradleProperty("webUrl").get()
 
 android {
-    // Namespace and applicationId predate the Auxparty name. The applicationId must
-    // never change: Android would treat the app as new and installs would stop updating.
-    namespace = "app.musicremote"
+    // The applicationId must not change again: Android treats a new id as a different
+    // app, so existing installs would stop receiving updates.
+    namespace = "app.auxparty"
     // Material 3 1.5 alphas require compiling against API 37. targetSdk (runtime behaviour) stays 36.
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "app.musicremote"
+        applicationId = "app.auxparty"
         minSdk = 26
         targetSdk = 36
         // Every CI run must increase versionCode or Android refuses the update.

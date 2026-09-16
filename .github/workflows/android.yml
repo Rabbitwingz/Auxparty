@@ -144,5 +144,3 @@ jobs:
               --notes "Built automatically from main. Download auxparty.apk on your phone to install or update."
           gh release edit android-latest --notes "Built automatically from main. Download auxparty.apk on your phone to install or update."
           gh release upload android-latest "$RUNNER_TEMP/auxparty.apk" --clobber
-          # The asset was called music-remote.apk before the Auxparty rename.
-          gh release delete-asset android-latest music-remote.apk -y 2>/dev/null || true
