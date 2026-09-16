@@ -16,7 +16,8 @@ android {
     // Namespace and applicationId predate the Auxparty name. The applicationId must
     // never change: Android would treat the app as new and installs would stop updating.
     namespace = "app.musicremote"
-    compileSdk = 36
+    // Material 3 1.5 alphas require compiling against API 37. targetSdk (runtime behaviour) stays 36.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.musicremote"
