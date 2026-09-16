@@ -1,5 +1,5 @@
 // Post-deploy smoke test: a throwaway phone and browser exercise the real relay.
-//   node tools/smoke.mjs https://ytm-bridge-relay.ytmbridge.workers.dev
+//   node tools/smoke.mjs https://relay.auxparty.workers.dev
 // Deliberately avoids anything that trips rate limits (e.g. bad pairing codes).
 import WebSocket from 'ws';
 import { randomBytes } from 'node:crypto';

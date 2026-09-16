@@ -132,16 +132,17 @@ jobs:
           gh release upload android-preview "$RUNNER_TEMP/auxparty-preview.apk" --clobber
 
       # A fixed download URL that always points at the newest build from main.
-      # The asset keeps its original name so existing download links keep working.
       - name: Publish to rolling release
         if: env.HAS_SIGNING_KEY == 'true' && env.IS_MAIN == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cp "$RUNNER_TEMP/auxparty.apk" "$RUNNER_TEMP/music-remote.apk"
           gh release view android-latest > /dev/null 2>&1 || \
             gh release create android-latest --prerelease \
               --title "Android app (latest build)" \
-              --notes "Built automatically from main. Download music-remote.apk on your phone to install or update."
-          gh release upload android-latest "$RUNNER_TEMP/music-remote.apk" --clobber
+              --notes "Built automatically from main. Download auxparty.apk on your phone to install or update."
+          gh release edit android-latest --notes "Built automatically from main. Download auxparty.apk on your phone to install or update."
+          gh release upload android-latest "$RUNNER_TEMP/auxparty.apk" --clobber
+          # The asset was called music-remote.apk before the Auxparty rename.
+          gh release delete-asset android-latest music-remote.apk -y 2>/dev/null || true

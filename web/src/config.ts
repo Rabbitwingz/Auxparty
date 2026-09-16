@@ -1,11 +1,11 @@
 // Where the relay lives. For local development, open the site once with
 // ?relay=http://127.0.0.1:8787; the override is remembered in this browser
 // until ?relay= (empty) clears it.
-const DEFAULT_RELAY = 'https://ytm-bridge-relay.ytmbridge.workers.dev';
-const RELAY_OVERRIDE_KEY = 'ytm-bridge.relay';
+const DEFAULT_RELAY = 'https://relay.auxparty.workers.dev';
+const RELAY_OVERRIDE_KEY = 'auxparty.relay';
 
 export const APP_NAME = 'Auxparty';
-export const APK_URL = 'https://github.com/Rabbitwingz/Auxparty/releases/download/android-latest/music-remote.apk';
+export const APK_URL = 'https://github.com/Rabbitwingz/Auxparty/releases/download/android-latest/auxparty.apk';
 export const SOURCE_URL = 'https://github.com/Rabbitwingz/Auxparty';
 
 function resolveRelay(): string {

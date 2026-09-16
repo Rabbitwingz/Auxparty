@@ -1,5 +1,5 @@
 {
-  "name": "ytm-bridge-relay",
+  "name": "auxparty-relay",
   "version": "1.0.0",
   "description": "WebSocket relay between browsers and the Android app (Cloudflare Worker + Durable Objects).",
   "directories": {

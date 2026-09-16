@@ -1,4 +1,4 @@
-name = "ytm-bridge-relay"
+name = "relay"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 
