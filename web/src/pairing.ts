@@ -3,14 +3,6 @@ import { RELAY_URL } from './config';
 
 const PAIRING_KEY = 'auxparty.pairing';
 
-// Pairings from before the move to the new relay can't authenticate there; forget them.
-try {
-  localStorage.removeItem('ytm-bridge.pairing');
-  localStorage.removeItem('ytm-bridge.relay');
-} catch {
-  /* storage unavailable */
-}
-
 export interface Pairing {
   deviceId: string;
   clientId: string;

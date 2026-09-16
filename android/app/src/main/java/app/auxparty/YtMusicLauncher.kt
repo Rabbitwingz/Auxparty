@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 
-/** Starts specific tracks and playlists in whichever YouTube Music build is installed. */
+/** Opens a specific track in whichever YouTube Music build is installed: the last-resort way to play. */
 object YtMusicLauncher {
 
     sealed class Result {
@@ -14,7 +14,6 @@ object YtMusicLauncher {
     }
 
     private val VIDEO_ID = Regex("^[\\w-]{6,20}$")
-    private val PLAYLIST_ID = Regex("^[\\w-]{6,60}$")
 
     /**
      * Which installed app opens music.youtube.com links. The stock build wins;
@@ -34,11 +33,6 @@ object YtMusicLauncher {
     fun playVideo(context: Context, videoId: String): Result {
         if (!VIDEO_ID.matches(videoId)) return Result.Failed("Invalid video id")
         return open(context, "https://music.youtube.com/watch?v=$videoId")
-    }
-
-    fun playPlaylist(context: Context, playlistId: String): Result {
-        if (!PLAYLIST_ID.matches(playlistId)) return Result.Failed("Invalid playlist id")
-        return open(context, "https://music.youtube.com/playlist?list=$playlistId")
     }
 
     private fun open(context: Context, url: String): Result {

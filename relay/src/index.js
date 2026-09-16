@@ -25,7 +25,7 @@ const QUEUE_ACTIONS = ['queue.add', 'queue.remove', 'queue.move', 'queue.clear']
 const ACTIONS = {
   client: new Set([
     'play', 'pause', 'playPause', 'next', 'previous',
-    'seek', 'volume', 'playVideo', 'playPlaylist', 'search', ...QUEUE_ACTIONS,
+    'seek', 'volume', 'playVideo', 'search', ...QUEUE_ACTIONS,
   ]),
   guest: new Set(['search', 'queue.add', 'queue.remove']),
 };

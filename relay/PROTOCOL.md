@@ -82,7 +82,7 @@ receive it, so they can ask the host to update the app instead of failing silent
 | --- | --- | --- |
 | `play`, `pause`, `playPause`, `next`, `previous` | ✓ | |
 | `seek {positionMs}`, `volume {value}` | ✓ | |
-| `playVideo {videoId, title, artist}`, `playPlaylist {playlistId}` | ✓ | |
+| `playVideo {videoId, title, artist}` | ✓ | |
 | `search {query}` | ✓ | ✓ |
 | `queue.add {videoId, title, artist, album, duration, thumbnail}` | ✓ | ✓ |
 | `queue.remove {itemId}` | ✓ any song | ✓ own songs (the phone enforces this) |

@@ -6,7 +6,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.util.Base64
 import app.auxparty.party.PartyController
 import app.auxparty.party.Requester
@@ -315,15 +314,6 @@ class RelayClient private constructor(private val context: Context) {
                         }
                         is BackgroundPlayer.Outcome.Failed -> fail(outcome.reason)
                     }
-                }
-            }
-            "playPlaylist" -> {
-                // Without this permission Android silently ignores the launch
-                // while the app is in the background, so say so instead.
-                if (!Settings.canDrawOverlays(context)) return fail("overlay_permission_missing")
-                when (val result = YtMusicLauncher.playPlaylist(context, args.optString("playlistId"))) {
-                    is YtMusicLauncher.Result.Started -> ok(null)
-                    is YtMusicLauncher.Result.Failed -> fail(result.reason)
                 }
             }
             "search" -> {
