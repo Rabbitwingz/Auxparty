@@ -30,3 +30,6 @@ Thumbs.db
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# Local wrangler state
+.wrangler/
