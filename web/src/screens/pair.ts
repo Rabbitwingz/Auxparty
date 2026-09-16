@@ -143,7 +143,8 @@ export function renderPair(root: HTMLElement, opts: PairOptions): void {
   }
 }
 
+/** The app icon (same file as the favicon, generated with the Android icon) and the name. */
 export function brand(): HTMLElement {
-  const mark = svg('svg', { viewBox: '0 0 1 1', class: 'logo', 'aria-hidden': 'true' }, svg('path', { d: morphPath(cookie(9), cookie(9), 0) }));
+  const mark = h('img', { src: '/icon.svg', class: 'logo', alt: '', width: 32, height: 32 });
   return h('div', { class: 'brand' }, mark, h('span', { class: 'title-large-emphasized' }, APP_NAME));
 }

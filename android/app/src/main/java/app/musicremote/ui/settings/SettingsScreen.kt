@@ -39,7 +39,7 @@ import app.musicremote.ui.icons.AuxIcons
 import app.musicremote.ui.state.Connection
 import app.musicremote.ui.state.HostUiState
 
-const val SOURCE_URL = "https://github.com/Rabbitwingz/YTM-Bridge"
+const val SOURCE_URL = "https://github.com/Rabbitwingz/Auxparty"
 
 class SettingsActions(
     val onBack: () -> Unit = {},
@@ -165,7 +165,7 @@ fun SettingsScreen(state: HostUiState, actions: SettingsActions = SettingsAction
                     onClick = { SystemIntents.open(context, SystemIntents.web(BuildConfig.WEB_URL)) },
                 )
                 GroupedRow(
-                    2, 4, "Source code", supporting = "github.com/Rabbitwingz/YTM-Bridge",
+                    2, 4, "Source code", supporting = "github.com/Rabbitwingz/Auxparty",
                     leading = { IconTile(AuxIcons.OpenInNew) },
                     onClick = { SystemIntents.open(context, SystemIntents.web(SOURCE_URL)) },
                 )

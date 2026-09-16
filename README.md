@@ -62,7 +62,7 @@ and ReVanced.
 ## Installing on a phone
 
 1. Download the app:
-   `https://github.com/Rabbitwingz/YTM-Bridge/releases/download/android-latest/music-remote.apk`
+   `https://github.com/Rabbitwingz/Auxparty/releases/download/android-latest/music-remote.apk`
 2. Install it. If **Google Play Protect** blocks the install, open the Play Store, tap your
    profile picture → **Play Protect** → ⚙ → pause **Scan apps with Play Protect**, install,
    then turn scanning back on.

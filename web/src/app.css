@@ -16,7 +16,7 @@
   background: var(--md-sys-color-surface);
 }
 .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
-.logo { width: 32px; height: 32px; fill: var(--md-sys-color-primary); flex: none; }
+.logo { display: block; width: 32px; height: 32px; flex: none; }
 
 .chip.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .chip.pending { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant); }
