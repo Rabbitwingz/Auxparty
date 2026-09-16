@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -264,7 +266,7 @@ fun PartyScreen(
 private fun songSupporting(item: QueueItem): String =
     listOfNotNull(item.artist, "Requested by ${requesterNames(item)}").joinToString(" · ")
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ShareCard(party: PartyUi, onShare: (String) -> Unit, onNewLink: () -> Unit) {
     Surface(
@@ -299,7 +301,8 @@ private fun ShareCard(party: PartyUi, onShare: (String) -> Unit, onNewLink: () -
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Wraps to two rows at large font sizes instead of squeezing the labels.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { link?.let(onShare) },
                     enabled = link != null,
