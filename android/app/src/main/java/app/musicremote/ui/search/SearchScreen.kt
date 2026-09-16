@@ -159,7 +159,8 @@ fun SearchScreen(
                         count = search.results.size,
                         headline = result.title,
                         supporting = resultSupporting(result),
-                        leading = { IconTile(AuxIcons.MusicNote) },
+                        // The tile says what a tap does: add to the queue, or play.
+                        leading = { IconTile(if (partyActive) AuxIcons.PlaylistAdd else AuxIcons.MusicNote) },
                         onClick = {
                             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                             if (partyActive) actions.onAddToQueue(result) else actions.onPlayNow(result)
