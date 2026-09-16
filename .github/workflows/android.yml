@@ -116,6 +116,21 @@ jobs:
           name: auxparty-apk
           path: ${{ runner.temp }}/auxparty.apk
 
+      # Branch builds go to a separate pre-release so a revamp can be tried on a
+      # phone before merging. Same signing key, so it installs over the main build.
+      - name: Publish branch preview
+        if: env.HAS_SIGNING_KEY == 'true' && env.IS_MAIN != 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp "$RUNNER_TEMP/auxparty.apk" "$RUNNER_TEMP/auxparty-preview.apk"
+          gh release view android-preview > /dev/null 2>&1 || \
+            gh release create android-preview --prerelease \
+              --title "Android app (branch preview)" \
+              --notes "Built from a development branch. Installs over the regular app."
+          gh release upload android-preview "$RUNNER_TEMP/auxparty-preview.apk" --clobber
+
       # A fixed download URL that always points at the newest build from main.
       # The asset keeps its original name so existing download links keep working.
       - name: Publish to rolling release

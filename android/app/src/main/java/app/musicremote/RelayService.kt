@@ -86,7 +86,7 @@ class RelayService : Service() {
 
     private fun notification(status: RelayClient.Status): Notification {
         val text = when (status) {
-            RelayClient.Status.CONNECTED -> "Ready for remote control"
+            RelayClient.Status.CONNECTED -> "Friends can pick the music"
             RelayClient.Status.CONNECTING -> "Connecting…"
             RelayClient.Status.OFFLINE -> "Offline, retrying"
         }
@@ -96,7 +96,8 @@ class RelayService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(getColor(R.color.brand))
             .setContentTitle("Auxparty")
             .setContentText(text)
             .setContentIntent(open)

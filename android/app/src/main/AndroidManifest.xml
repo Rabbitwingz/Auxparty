@@ -27,13 +27,15 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@android:drawable/ic_media_play"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="Auxparty"
-        android:theme="@android:style/Theme.Material">
+        android:theme="@style/Theme.Auxparty">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.Auxparty.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
