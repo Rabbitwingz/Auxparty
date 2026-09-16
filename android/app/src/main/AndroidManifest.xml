@@ -28,7 +28,7 @@
     <application
         android:allowBackup="false"
         android:icon="@android:drawable/ic_media_play"
-        android:label="Music Remote"
+        android:label="Auxparty"
         android:theme="@android:style/Theme.Material">
 
         <activity
@@ -65,7 +65,7 @@
         <service
             android:name=".MediaListenerService"
             android:exported="true"
-            android:label="Music Remote"
+            android:label="Auxparty"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

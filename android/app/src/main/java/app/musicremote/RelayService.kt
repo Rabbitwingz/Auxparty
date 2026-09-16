@@ -97,7 +97,7 @@ class RelayService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Music Remote")
+            .setContentTitle("Auxparty")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)

@@ -2,9 +2,9 @@ name: Android app
 
 on:
   push:
-    branches: [main]
     paths:
       - "android/**"
+      - "design/**"
       - ".github/workflows/android.yml"
   pull_request:
     paths:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # publishing the rolling release
+  contents: write # publishing releases (APK and screenshots)
 
 concurrency:
   group: android-${{ github.ref }}
@@ -26,6 +26,7 @@ jobs:
         working-directory: android
     env:
       HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
+      IS_MAIN: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -38,12 +39,34 @@ jobs:
       # No Gradle wrapper is committed; this installs a pinned Gradle instead.
       - uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.11.1"
+          gradle-version: "9.7.1"
 
-      - name: Unit tests
+      # One debug test pass runs the unit tests and renders the screenshot tests
+      # (Robolectric + Roborazzi) to app/build/outputs/roborazzi.
+      - name: Unit tests and screenshots
         run: |
           set -o pipefail
-          gradle --no-daemon testReleaseUnitTest 2>&1 | tee -a "$RUNNER_TEMP/gradle.log"
+          gradle --no-daemon recordRoborazziDebug 2>&1 | tee -a "$RUNNER_TEMP/gradle.log"
+
+      # Every push, any branch: replace the screenshots in the public
+      # `ui-screenshots` pre-release, so a design review needs no local build.
+      - name: Publish screenshots
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shots=$(ls app/build/outputs/roborazzi/*.png 2>/dev/null || true)
+          [ -n "$shots" ] || { echo "::warning::No screenshots were rendered"; exit 0; }
+          tag=ui-screenshots
+          gh release view "$tag" > /dev/null 2>&1 || \
+            gh release create "$tag" --prerelease --title "UI screenshots" \
+              --notes "Rendered by CI from the most recent push. Not an app release."
+          for asset in $(gh release view "$tag" --json assets -q '.assets[].name'); do
+            gh release delete-asset "$tag" "$asset" -y
+          done
+          printf 'ref=%s\nsha=%s\nrun=%s\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" "$GITHUB_RUN_ID" > "$RUNNER_TEMP/build-info.txt"
+          gh release upload "$tag" $shots "$RUNNER_TEMP/build-info.txt" --clobber
 
       - name: Decode signing key
         if: env.HAS_SIGNING_KEY == 'true'
@@ -68,7 +91,8 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon assembleRelease 2>&1 | tee -a "$RUNNER_TEMP/gradle.log"
-          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/music-remote.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/auxparty.apk"
+          echo "::notice title=APK size::$(stat -c %s "$RUNNER_TEMP/auxparty.apk") bytes"
 
       # Compiler and test errors as a single annotation. Annotations are readable
       # through the public API, so failures can be diagnosed without raw logs.
@@ -78,10 +102,10 @@ jobs:
           [ -f "$RUNNER_TEMP/gradle.log" ] || exit 0
           summary=$( {
             grep -E '^e: ' "$RUNNER_TEMP/gradle.log"
-            grep -E -A1 'FAILED$|expected:<' "$RUNNER_TEMP/gradle.log"
-            grep -A4 '^\* What went wrong' "$RUNNER_TEMP/gradle.log"
-          } | sed -E 's#file:///home/runner/work/[^/]+/[^/]+/##' | awk '!seen[$0]++' | head -60 )
-          [ -n "$summary" ] || summary=$(tail -40 "$RUNNER_TEMP/gradle.log")
+            grep -E -A3 'FAILED$|expected:<|Exception:' "$RUNNER_TEMP/gradle.log"
+            grep -A6 '^\* What went wrong' "$RUNNER_TEMP/gradle.log"
+          } | sed -E 's#file:///home/runner/work/[^/]+/[^/]+/##' | awk '!seen[$0]++' | head -80 )
+          [ -n "$summary" ] || summary=$(tail -60 "$RUNNER_TEMP/gradle.log")
           # Newlines must be %0A-encoded to survive inside one annotation.
           encoded=$(printf '%s' "$summary" | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
           echo "::error title=Gradle failure::$encoded"
@@ -89,17 +113,18 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: env.HAS_SIGNING_KEY == 'true'
         with:
-          name: music-remote-apk
-          path: ${{ runner.temp }}/music-remote.apk
+          name: auxparty-apk
+          path: ${{ runner.temp }}/auxparty.apk
 
-      # A fixed download URL that always points at the newest build:
-      # https://github.com/Rabbitwingz/YTM-Bridge/releases/download/android-latest/music-remote.apk
+      # A fixed download URL that always points at the newest build from main.
+      # The asset keeps its original name so existing download links keep working.
       - name: Publish to rolling release
-        if: env.HAS_SIGNING_KEY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: env.HAS_SIGNING_KEY == 'true' && env.IS_MAIN == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          cp "$RUNNER_TEMP/auxparty.apk" "$RUNNER_TEMP/music-remote.apk"
           gh release view android-latest > /dev/null 2>&1 || \
             gh release create android-latest --prerelease \
               --title "Android app (latest build)" \

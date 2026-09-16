@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MusicRemote"
+rootProject.name = "Auxparty"
 include(":app")
