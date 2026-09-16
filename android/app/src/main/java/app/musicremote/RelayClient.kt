@@ -341,7 +341,7 @@ class RelayClient private constructor(private val context: Context) {
             "queue.add", "queue.remove", "queue.move", "queue.clear" ->
                 when (val result = party.command(action, args, from)) {
                     is PartyController.CommandResult.Ok -> ok(result.data)
-                    is PartyController.CommandResult.Error -> fail(result.error)
+                    is PartyController.CommandResult.Error -> fail(result.code)
                 }
             else -> fail("unknown_action")
         }
