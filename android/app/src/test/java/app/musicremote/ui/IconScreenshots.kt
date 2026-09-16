@@ -29,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
 /** The launcher icon as it appears in a circle mask, a squircle mask, and themed. */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35])
+@Config(sdk = [35], qualifiers = "w600dp-h240dp-xhdpi")
 class IconScreenshots {
 
     @get:Rule val compose = createComposeRule()

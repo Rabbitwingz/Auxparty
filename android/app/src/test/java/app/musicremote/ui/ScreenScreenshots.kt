@@ -74,42 +74,28 @@ class ScreenScreenshots {
 
     // --------------------------------------------------------------- invite
 
-    @androidx.compose.runtime.Composable
-    private fun sheet(content: @androidx.compose.runtime.Composable () -> Unit) {
-        // The sheet body on a sheet-like surface, anchored to the bottom as on a phone.
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(Modifier.padding(top = 24.dp)) { content() }
-            }
-        }
-    }
-
     @Test fun invite_code_light() {
         val art = SampleArtwork.sunset()
         val code = PairCodeUi("K7QM3XPD", issuedAt = NOW - 42_000, expiresAt = NOW + 258_000)
         val s = state(art, playing(art, "Golden Hour Drive", "The Midnight Arcade"), pairCode = code)
-        compose.shoot("invite_code_light", s, dark = false) { sheet { InviteContent(s, {}, {}, now = { NOW }) } }
+        compose.shoot("invite_code_light", s, dark = false) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
     }
 
     @Test fun invite_code_expired_dark() {
         val code = PairCodeUi("K7QM3XPD", issuedAt = NOW - 300_000, expiresAt = NOW)
         val s = state(pairCode = code)
-        compose.shoot("invite_code_expired_dark", s, dark = true) { sheet { InviteContent(s, {}, {}, now = { NOW }) } }
+        compose.shoot("invite_code_expired_dark", s, dark = true) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
     }
 
     @Test fun invite_joined_dark() {
         val art = SampleArtwork.ocean()
         val s = state(art, playing(art, "Tidal", "Harbour Lights"), justLinked = "Chrome on Windows")
-        compose.shoot("invite_joined_dark", s, dark = true) { sheet { InviteContent(s, {}, {}, now = { NOW }) } }
+        compose.shoot("invite_joined_dark", s, dark = true) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
     }
 
     @Test fun invite_offline_light() {
         val s = state(connection = Connection.Offline)
-        compose.shoot("invite_offline_light", s, dark = false) { sheet { InviteContent(s, {}, {}, now = { NOW }) } }
+        compose.shoot("invite_offline_light", s, dark = false) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
     }
 
     // ----------------------------------------------------------- onboarding
@@ -176,11 +162,25 @@ class LargeFontScreenshots {
     @Test fun invite_code_font200() {
         val code = PairCodeUi("K7QM3XPD", issuedAt = NOW - 42_000, expiresAt = NOW + 258_000)
         val s = state(pairCode = code)
-        compose.shoot("invite_code_font200", s, dark = true) { InviteContent(s, {}, {}, now = { NOW }) }
+        compose.shoot("invite_code_font200", s, dark = true) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
     }
 
     @Test fun onboarding_notification_access_font200() {
         val s = state(setup = SetupState(notifications = false))
         compose.shoot("onboarding_notification_access_font200", s, dark = false) { OnboardingStep(SetupStep.NotificationAccess, s.setup) }
+    }
+}
+
+/** Sheet body on a sheet-like surface anchored to the bottom, as it appears on a phone. */
+@androidx.compose.runtime.Composable
+fun SheetFrame(content: @androidx.compose.runtime.Composable () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(Modifier.padding(top = 24.dp)) { content() }
+        }
     }
 }

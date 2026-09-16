@@ -65,8 +65,17 @@ export class Slider {
     this.set(opts.value);
   }
 
+  /** External updates (e.g. the phone's volume) never fight a drag in progress. */
   set(value: number): void {
+    if (this.el.classList.contains('pressed')) return;
     this.update(value, false);
+  }
+
+  setMax(max: number): void {
+    if (this.opts.max === max) return;
+    this.opts.max = max;
+    this.el.setAttribute('aria-valuemax', String(max));
+    this.update(this.value, false);
   }
 
   private update(raw: number, fromUser: boolean): void {

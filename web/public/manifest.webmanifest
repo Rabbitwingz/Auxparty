@@ -1,0 +1,14 @@
+{
+  "name": "Auxparty",
+  "short_name": "Auxparty",
+  "description": "Pick the music playing on a friend's phone.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#141218",
+  "theme_color": "#7B5CFF",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
