@@ -12,11 +12,13 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,9 +32,12 @@ import app.musicremote.ui.home.HomeActions
 import app.musicremote.ui.home.HomeScreen
 import app.musicremote.ui.home.InviteSheet
 import app.musicremote.ui.onboarding.OnboardingScreen
+import app.musicremote.ui.party.PartyActions
+import app.musicremote.ui.party.PartyScreen
 import app.musicremote.ui.settings.SettingsActions
 import app.musicremote.ui.settings.SettingsScreen
 import app.musicremote.ui.state.Connection
+import app.musicremote.ui.state.partyShareText
 import app.musicremote.ui.theme.AuxpartyTheme
 
 private object Routes {
@@ -41,6 +46,7 @@ private object Routes {
     const val DEVICES = "devices"
     const val SETTINGS = "settings"
     const val DIAGNOSTICS = "diagnostics"
+    const val PARTY = "party"
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -72,6 +78,11 @@ fun AuxpartyApp(vm: HostViewModel) {
 
         val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             vm.refreshSetup()
+        }
+
+        val context = LocalContext.current
+        val sharePartyLink: (String) -> Unit = { link ->
+            SystemIntents.open(context, SystemIntents.share(partyShareText(link)))
         }
 
         // Screens slide on the theme's spatial spring; read it here because the
@@ -109,6 +120,30 @@ fun AuxpartyApp(vm: HostViewModel) {
                         onDevices = { nav.navigate(Routes.DEVICES) },
                         onSettings = { nav.navigate(Routes.SETTINGS) },
                         onFinishSetup = { nav.navigate(Routes.ONBOARDING) },
+                        onStartParty = vm::startParty,
+                        onEndParty = vm::endParty,
+                        onOpenParty = { nav.navigate(Routes.PARTY) },
+                        onShareParty = sharePartyLink,
+                    ),
+                )
+            }
+            composable(Routes.PARTY) {
+                // Leave when the party ends (from here, or from Home in another window).
+                LaunchedEffect(state.party.active) {
+                    if (!state.party.active) nav.popBackStack(Routes.HOME, inclusive = false)
+                }
+                PartyScreen(
+                    party = state.party,
+                    actions = PartyActions(
+                        onBack = { nav.popBackStack() },
+                        onShare = sharePartyLink,
+                        onNewLink = vm::newPartyLink,
+                        onEndParty = vm::endParty,
+                        onRemove = vm::removeFromQueue,
+                        onPlayNext = vm::playNextInQueue,
+                        onClear = vm::clearQueue,
+                        onRemoveGuest = vm::removeGuest,
+                        onGuestLimit = vm::setGuestLimit,
                     ),
                 )
             }

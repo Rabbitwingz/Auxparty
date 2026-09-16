@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import app.musicremote.MediaBridge
 import app.musicremote.SearchResult
 import app.musicremote.BackgroundPlayer
 import app.musicremote.YtMusicSearch
+import app.musicremote.party.PartyController
 import app.musicremote.ui.components.SectionLabel
 import app.musicremote.ui.icons.AuxIcons
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +69,15 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     var searching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf(emptyList<SearchResult>()) }
     val log = remember { mutableStateListOf<String>() }
+
+    // Why the party queue did what it did (song ended, autoplay cut, skipped…).
+    var partyLog by remember { mutableStateOf(emptyList<String>()) }
+    DisposableEffect(Unit) {
+        val party = PartyController.get(context)
+        val listener = PartyController.Listener { partyLog = it.log }
+        party.addListener(listener)
+        onDispose { party.removeListener(listener) }
+    }
 
     fun note(line: String) {
         val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
@@ -175,6 +186,12 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+            }
+            if (partyLog.isNotEmpty()) {
+                item { SectionLabel("Party queue log", Modifier.padding(start = 0.dp)) }
+                items(partyLog) { line ->
+                    Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                 }
             }
             if (log.isNotEmpty()) {

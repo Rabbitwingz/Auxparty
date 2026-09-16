@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -34,6 +37,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.WavyProgressIndicatorDefaults
@@ -61,6 +65,9 @@ import app.musicremote.ui.state.Connection
 import app.musicremote.ui.state.HostUiState
 import app.musicremote.ui.state.NowPlayingUi
 import app.musicremote.ui.state.formatTime
+import app.musicremote.ui.state.partySummary
+import app.musicremote.ui.state.requestedByFor
+import app.musicremote.ui.state.requesterNames
 
 class HomeActions(
     val onPlayPause: () -> Unit = {},
@@ -72,11 +79,16 @@ class HomeActions(
     val onDevices: () -> Unit = {},
     val onSettings: () -> Unit = {},
     val onFinishSetup: () -> Unit = {},
+    val onStartParty: () -> Unit = {},
+    val onEndParty: () -> Unit = {},
+    val onOpenParty: () -> Unit = {},
+    val onShareParty: (String) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(state: HostUiState, actions: HomeActions = HomeActions()) {
+    var confirmEnd by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -125,7 +137,7 @@ fun HomeScreen(state: HostUiState, actions: HomeActions = HomeActions()) {
                     modifier = Modifier.widthIn(max = 360.dp),
                 )
                 Spacer(Modifier.height(28.dp))
-                TrackDetails(np, actions.onSeek)
+                TrackDetails(np, actions.onSeek, requestedBy = requestedByFor(state.party, np.title))
                 Spacer(Modifier.height(20.dp))
                 Transport(np, actions)
                 Spacer(Modifier.height(12.dp))
@@ -133,8 +145,159 @@ fun HomeScreen(state: HostUiState, actions: HomeActions = HomeActions()) {
             }
 
             Spacer(Modifier.height(24.dp))
-            InviteCard(state, actions)
+            ModeToggle(state, onRemote = { confirmEnd = true }, onParty = actions.onStartParty)
+            Spacer(Modifier.height(16.dp))
+            if (state.party.active) PartyCard(state, actions) else InviteCard(state, actions)
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (confirmEnd) {
+        AlertDialog(
+            onDismissRequest = { confirmEnd = false },
+            icon = { Icon(AuxIcons.Celebration, null) },
+            title = { Text("End the party?") },
+            text = { Text("Guests are disconnected, the link stops working and the queue is cleared. Linked browsers go back to playing picks straight away.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmEnd = false
+                    actions.onEndParty()
+                }) { Text("End party") }
+            },
+            dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text("Keep partying") } },
+        )
+    }
+}
+
+/**
+ * Remote: a pick from a linked browser plays straight away. Party: friends request
+ * songs through a link and they play in order.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ModeToggle(state: HostUiState, onRemote: () -> Unit, onParty: () -> Unit) {
+    val party = state.party
+    val partySelected = party.active || party.starting
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        ) {
+            ToggleButton(
+                checked = !partySelected,
+                onCheckedChange = { if (party.active) onRemote() },
+                shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+                modifier = Modifier.weight(1f).height(ButtonDefaults.MediumContainerHeight),
+            ) {
+                Icon(AuxIcons.Devices, null, Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Remote", style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
+            }
+            ToggleButton(
+                checked = partySelected,
+                onCheckedChange = { if (!partySelected) onParty() },
+                enabled = state.connection == Connection.Online || party.active,
+                shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                modifier = Modifier.weight(1f).height(ButtonDefaults.MediumContainerHeight),
+            ) {
+                if (party.starting) {
+                    LoadingIndicator(Modifier.size(24.dp))
+                } else {
+                    Icon(AuxIcons.Celebration, null, Modifier.size(20.dp))
+                }
+                Spacer(Modifier.size(8.dp))
+                Text("Party", style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val error = state.partyError
+        Text(
+            when {
+                error == "offline" -> "Party mode needs a connection. Auxparty keeps retrying in the background."
+                error == "timeout" -> "Couldn't start the party. Check the connection and try again."
+                partySelected -> "Friends request songs with a link. They play in order."
+                else -> "Songs picked in linked browsers play straight away."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PartyCard(state: HostUiState, actions: HomeActions) {
+    val party = state.party
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text("Up next", style = MaterialTheme.typography.titleLargeEmphasized)
+            Spacer(Modifier.height(4.dp))
+            Text(partySummary(party), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+
+            if (party.upcoming.isEmpty()) {
+                Text(
+                    "No requests yet. Share the link so friends can add songs.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            } else {
+                party.upcoming.take(3).forEachIndexed { i, item ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${i + 1}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(28.dp),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "Requested by ${requesterNames(item)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                if (party.upcoming.size > 3) {
+                    Text(
+                        "and ${party.upcoming.size - 3} more",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 28.dp, top = 2.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = { party.link?.let(actions.onShareParty) },
+                    enabled = party.link != null,
+                    shapes = ButtonDefaults.shapes(),
+                    contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight, hasStartIcon = true),
+                    modifier = Modifier.height(ButtonDefaults.MediumContainerHeight),
+                ) {
+                    Icon(AuxIcons.Share, null, Modifier.size(ButtonDefaults.iconSizeFor(ButtonDefaults.MediumContainerHeight)))
+                    Spacer(Modifier.size(ButtonDefaults.iconSpacingFor(ButtonDefaults.MediumContainerHeight)))
+                    Text("Share", style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
+                }
+                OutlinedButton(
+                    onClick = actions.onOpenParty,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = Modifier.height(ButtonDefaults.MediumContainerHeight),
+                ) {
+                    Text("Manage", style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
+                }
+            }
         }
     }
 }
@@ -186,7 +349,7 @@ private fun SetupBanner(onFinish: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun TrackDetails(np: NowPlayingUi, onSeek: (Float) -> Unit) {
+private fun TrackDetails(np: NowPlayingUi, onSeek: (Float) -> Unit, requestedBy: String? = null) {
     val haptics = LocalHapticFeedback.current
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -210,6 +373,23 @@ private fun TrackDetails(np: NowPlayingUi, onSeek: (Float) -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        requestedBy?.let {
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                shape = CircleShape,
+            ) {
+                Row(
+                    Modifier.padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(AuxIcons.Person, null, Modifier.size(18.dp))
+                    Text("Requested by $it", style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
         Spacer(Modifier.height(20.dp))
 

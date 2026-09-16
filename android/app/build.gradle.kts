@@ -95,6 +95,8 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.2.0")
     // Material Color Utilities port: seed colour from artwork, dynamic schemes.
     implementation("com.materialkolor:material-kolor:5.0.1")
+    // QR codes for the party link (encoder only; R8 drops the rest).
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
     // Android's org.json is a stub on the JVM; tests need the real one.

@@ -21,7 +21,10 @@ import app.musicremote.RelayService
 import app.musicremote.StatePublisher
 import app.musicremote.ThemeMode
 import app.musicremote.YtMusicLauncher
+import app.musicremote.party.PartyController
 import app.musicremote.ui.state.Connection
+import app.musicremote.ui.state.GuestUi
+import app.musicremote.ui.state.PartyUi
 import app.musicremote.ui.state.HostUiState
 import app.musicremote.ui.state.LinkedBrowserUi
 import app.musicremote.ui.state.NowPlayingUi
@@ -48,7 +51,9 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     private val bridge = MediaBridge.get(app)
     private val relay = RelayClient.get(app)
+    private val party = PartyController.get(app)
     private val prefs = AppPrefs(app)
+    private var partyStartTimeout: Job? = null
 
     private val _state = MutableStateFlow(
         HostUiState(themeMode = prefs.themeMode, onboardingDone = prefs.onboardingDone),
@@ -105,15 +110,37 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val partyListener = PartyController.Listener { p ->
+        _state.update {
+            val starting = it.party.starting && !p.active
+            if (p.active) partyStartTimeout?.cancel()
+            it.copy(
+                party = PartyUi(
+                    active = p.active,
+                    starting = starting,
+                    link = p.link,
+                    guests = p.guests.map { g -> GuestUi(g.guestId, g.name, g.joinedAt) },
+                    current = p.current,
+                    upcoming = p.upcoming,
+                    limitPerGuest = p.limitPerGuest,
+                    log = p.log,
+                ),
+                partyError = if (p.active) null else it.partyError,
+            )
+        }
+    }
+
     init {
         bridge.addListener(onMedia)
         relay.addListener(relayListener)
+        party.addListener(partyListener)
         refreshSetup()
     }
 
     override fun onCleared() {
         bridge.removeListener(onMedia)
         relay.removeListener(relayListener)
+        party.removeListener(partyListener)
     }
 
     // ---------------------------------------------------------------- media
@@ -180,7 +207,11 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playPause() = bridge.playPause()
-    fun next() = bridge.next()
+
+    /** During a party with requests waiting, "next" plays the next request. */
+    fun next() {
+        if (!party.skip()) bridge.next()
+    }
     fun previous() = bridge.previous()
     fun setVolume(value: Int) = bridge.setVolume(value)
 
@@ -204,6 +235,56 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     fun revoke(id: String) {
         relay.revoke(id)
+    }
+
+    // ---------------------------------------------------------------- party
+
+    fun startParty() {
+        if (_state.value.party.active) return
+        if (!relay.startParty()) {
+            _state.update { it.copy(partyError = "offline") }
+            return
+        }
+        _state.update { it.copy(party = it.party.copy(starting = true), partyError = null) }
+        // If the relay never answers, don't leave the switch stuck halfway.
+        partyStartTimeout?.cancel()
+        partyStartTimeout = viewModelScope.launch {
+            delay(PARTY_START_TIMEOUT_MS)
+            _state.update {
+                if (it.party.active) it
+                else it.copy(party = it.party.copy(starting = false), partyError = "timeout")
+            }
+        }
+    }
+
+    fun endParty() {
+        if (!relay.endParty()) _state.update { it.copy(partyError = "offline") }
+    }
+
+    fun newPartyLink() {
+        if (!relay.newPartyLink()) _state.update { it.copy(partyError = "offline") }
+    }
+
+    fun removeGuest(id: String) {
+        if (!relay.removeGuest(id)) _state.update { it.copy(partyError = "offline") }
+    }
+
+    fun removeFromQueue(itemId: String) {
+        party.remove(itemId)
+    }
+
+    fun playNextInQueue(itemId: String) {
+        party.playNext(itemId)
+    }
+
+    fun clearQueue() {
+        party.clear()
+    }
+
+    fun setGuestLimit(limit: Int) = party.setLimitPerGuest(limit)
+
+    fun dismissPartyError() {
+        _state.update { it.copy(partyError = null) }
     }
 
     // ---------------------------------------------------------------- setup
@@ -241,5 +322,6 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val SEED_DEBOUNCE_MS = 300L
+        const val PARTY_START_TIMEOUT_MS = 10_000L
     }
 }

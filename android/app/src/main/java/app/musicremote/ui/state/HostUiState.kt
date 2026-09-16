@@ -64,6 +64,9 @@ data class HostUiState(
     val setup: SetupState = SetupState(),
     val themeMode: ThemeMode = ThemeMode.System,
     val onboardingDone: Boolean = false,
+    val party: PartyUi = PartyUi(),
+    /** Why the last party action didn't go through, e.g. "offline". */
+    val partyError: String? = null,
 )
 
 // ------------------------------------------------------------- onboarding

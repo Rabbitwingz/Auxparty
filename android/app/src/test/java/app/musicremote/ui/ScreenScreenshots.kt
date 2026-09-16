@@ -19,6 +19,8 @@ import app.musicremote.ui.devices.DevicesScreen
 import app.musicremote.ui.home.HomeScreen
 import app.musicremote.ui.home.InviteContent
 import app.musicremote.ui.onboarding.OnboardingStep
+import app.musicremote.ui.party.PartyScreen
+import app.musicremote.ui.state.PartyUi
 import app.musicremote.ui.settings.SettingsScreen
 import app.musicremote.ui.state.Connection
 import app.musicremote.ui.state.PairCodeUi
@@ -70,6 +72,37 @@ class ScreenScreenshots {
     @Test fun home_setup_needed_offline_light() {
         val s = state(connection = Connection.Offline, linked = emptyList(), setup = SetupState(notifications = true))
         compose.shoot("home_setup_needed_offline_light", s, dark = false) { HomeScreen(s) }
+    }
+
+    // ---------------------------------------------------------------- party
+
+    @Test fun home_party_sunset_light() {
+        val art = SampleArtwork.sunset()
+        val s = state(art, playing(art, "Golden Hour Drive", "The Midnight Arcade")).copy(party = Fixtures.party)
+        compose.shoot("home_party_sunset_light", s, dark = false) { HomeScreen(s) }
+    }
+
+    @Test fun home_party_starting_dark() {
+        val art = SampleArtwork.ocean()
+        val s = state(art, playing(art, "Tidal", "Harbour Lights")).copy(party = PartyUi(starting = true))
+        compose.shoot("home_party_starting_dark", s, dark = true) { HomeScreen(s) }
+    }
+
+    @Test fun party_queue_sunset_light() {
+        val art = SampleArtwork.sunset()
+        val s = state(art, playing(art, "Golden Hour Drive", "The Midnight Arcade")).copy(party = Fixtures.party)
+        compose.shoot("party_queue_sunset_light", s, dark = false) { PartyScreen(s.party, now = NOW) }
+    }
+
+    @Test fun party_queue_ocean_dark() {
+        val art = SampleArtwork.ocean()
+        val s = state(art, playing(art, "Tidal", "Harbour Lights")).copy(party = Fixtures.party)
+        compose.shoot("party_queue_ocean_dark", s, dark = true) { PartyScreen(s.party, now = NOW) }
+    }
+
+    @Test fun party_empty_dark() {
+        val s = state().copy(party = PartyUi(active = true, link = Fixtures.party.link))
+        compose.shoot("party_empty_dark", s, dark = true) { PartyScreen(s.party, now = NOW) }
     }
 
     // --------------------------------------------------------------- invite
@@ -163,6 +196,17 @@ class LargeFontScreenshots {
         val code = PairCodeUi("K7QM3XPD", issuedAt = NOW - 42_000, expiresAt = NOW + 258_000)
         val s = state(pairCode = code)
         compose.shoot("invite_code_font200", s, dark = true) { SheetFrame { InviteContent(s, {}, {}, now = { NOW }) } }
+    }
+
+    @Test fun party_queue_font200() {
+        val s = state().copy(party = Fixtures.party)
+        compose.shoot("party_queue_font200", s, dark = false) { PartyScreen(s.party, now = NOW) }
+    }
+
+    @Test fun home_party_font200() {
+        val art = SampleArtwork.ocean()
+        val s = state(art, playing(art, "Tidal", "Harbour Lights")).copy(party = Fixtures.party)
+        compose.shoot("home_party_font200", s, dark = true) { HomeScreen(s) }
     }
 
     @Test fun onboarding_notification_access_font200() {
