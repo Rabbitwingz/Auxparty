@@ -1,0 +1,107 @@
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write # publishing the rolling release
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # No Gradle wrapper is committed; this installs a pinned Gradle instead.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          gradle --no-daemon testReleaseUnitTest 2>&1 | tee -a "$RUNNER_TEMP/gradle.log"
+
+      - name: Decode signing key
+        if: env.HAS_SIGNING_KEY == 'true'
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        run: |
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          # Fail here, clearly, rather than deep inside Gradle.
+          keytool -list -storetype pkcs12 -keystore "$RUNNER_TEMP/release.p12" -storepass "$SIGNING_STORE_PASSWORD" > /dev/null
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+
+      - name: Warn about unsigned build
+        if: env.HAS_SIGNING_KEY != 'true'
+        run: echo "::warning::No signing key secrets configured. The APK is built and tested but NOT published, because an install signed with a throwaway key blocks every later update."
+
+      - name: Build APK
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -o pipefail
+          gradle --no-daemon assembleRelease 2>&1 | tee -a "$RUNNER_TEMP/gradle.log"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/music-remote.apk"
+
+      # Compiler and test errors as a single annotation. Annotations are readable
+      # through the public API, so failures can be diagnosed without raw logs.
+      - name: Summarise failure
+        if: failure()
+        run: |
+          [ -f "$RUNNER_TEMP/gradle.log" ] || exit 0
+          summary=$( {
+            grep -E '^e: ' "$RUNNER_TEMP/gradle.log"
+            grep -E -A1 'FAILED$|expected:<' "$RUNNER_TEMP/gradle.log"
+            grep -A4 '^\* What went wrong' "$RUNNER_TEMP/gradle.log"
+          } | sed -E 's#file:///home/runner/work/[^/]+/[^/]+/##' | awk '!seen[$0]++' | head -60 )
+          [ -n "$summary" ] || summary=$(tail -40 "$RUNNER_TEMP/gradle.log")
+          # Newlines must be %0A-encoded to survive inside one annotation.
+          encoded=$(printf '%s' "$summary" | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Gradle failure::$encoded"
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_SIGNING_KEY == 'true'
+        with:
+          name: music-remote-apk
+          path: ${{ runner.temp }}/music-remote.apk
+
+      # A fixed download URL that always points at the newest build:
+      # https://github.com/Rabbitwingz/YTM-Bridge/releases/download/android-latest/music-remote.apk
+      - name: Publish to rolling release
+        if: env.HAS_SIGNING_KEY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view android-latest > /dev/null 2>&1 || \
+            gh release create android-latest --prerelease \
+              --title "Android app (latest build)" \
+              --notes "Built automatically from main. Download music-remote.apk on your phone to install or update."
+          gh release upload android-latest "$RUNNER_TEMP/music-remote.apk" --clobber

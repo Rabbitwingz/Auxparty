@@ -1,0 +1,32 @@
+# Node
+node_modules/
+
+# Bundled adb binaries (downloaded, not source)
+local-adb/tools/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+
+# Signing material must never be committed
+*.jks
+*.keystore
+*.p12
+signing/
+
+# Cloudflare / Vercel local state
+.wrangler/
+.vercel/
+.dev.vars
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Personal Claude Code settings
+.claude/settings.local.json

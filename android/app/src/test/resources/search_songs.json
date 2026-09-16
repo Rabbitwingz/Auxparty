@@ -1,0 +1,404 @@
+{
+ "contents": {
+  "tabbedSearchResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "content": {
+       "sectionListRenderer": {
+        "contents": [
+         {
+          "musicShelfRenderer": {
+           "contents": [
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/aEauLDI1LDyikTaQjpgLSNAIialg3J9nfxoelUR3bzWKuUNMtvgua7YaeRaczqj-Ezfeot0-LknzSz_lzA=w60-h60-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/aEauLDI1LDyikTaQjpgLSNAIialg3J9nfxoelUR3bzWKuUNMtvgua7YaeRaczqj-Ezfeot0-LknzSz_lzA=w120-h120-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FIT",
+                "trackingParams": "CPMCEIS_AiITCMLcg4jY8pYDFT3tVQkdeiEzDw=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Numb",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "COICEOFnGAAiEwjC3IOI2PKWAxU97VUJHXohMw-aAQMQ9CTKAQRUzorp",
+                     "watchEndpoint": {
+                      "videoId": "RvegizX3GqY",
+                      "watchEndpointMusicSupportedConfigs": {
+                       "watchEndpointMusicConfig": {
+                        "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                       }
+                      }
+                     }
+                    }
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Elderbrook",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "COICEOFnGAAiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "UClWkDlikoBvhfQMC0b2niUQ",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "Why Do We Shake In The Cold?",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "COICEOFnGAAiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "MPREb_xxrWAWXHBNw",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "3:51"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "Elderbrook • Why Do We Shake In The Cold? • 3 minutes, 51 seconds"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "153M plays"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "153 million plays"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "playlistItemData": {
+               "videoId": "RvegizX3GqY"
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/B8tYKk0VHOTSLc0EN2rRGsT7fxadpXW_BVpNnpSTB6m63X6ML2imfrq7SQqbsD7eOROv208AdiHmzm0=w60-h60-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/B8tYKk0VHOTSLc0EN2rRGsT7fxadpXW_BVpNnpSTB6m63X6ML2imfrq7SQqbsD7eOROv208AdiHmzm0=w120-h120-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FIT",
+                "trackingParams": "COECEIS_AiITCMLcg4jY8pYDFT3tVQkdeiEzDw=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Numb (Chill Mix)",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CNACEOFnGAEiEwjC3IOI2PKWAxU97VUJHXohMw-aAQMQ9CTKAQRUzorp",
+                     "watchEndpoint": {
+                      "videoId": "nn2t_MjN9a4",
+                      "watchEndpointMusicSupportedConfigs": {
+                       "watchEndpointMusicConfig": {
+                        "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                       }
+                      }
+                     }
+                    }
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Elderbrook",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CNACEOFnGAEiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "UClWkDlikoBvhfQMC0b2niUQ",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "Numb",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CNACEOFnGAEiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "MPREb_sjMgxhaDgRE",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "3:20"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "Elderbrook • Numb • 3 minutes, 20 seconds"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "15M plays"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "15 million plays"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "playlistItemData": {
+               "videoId": "nn2t_MjN9a4"
+              }
+             }
+            },
+            {
+             "musicResponsiveListItemRenderer": {
+              "thumbnail": {
+               "musicThumbnailRenderer": {
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://yt3.googleusercontent.com/cwVP46CNLlemtFI-x7mfb8wXHB6Hf6vMUWJSJ0hHdYuakocC9fzfOlF7TjKqqq9Q4MXAPd0nwAIlSg=w60-h60-l90-rj",
+                   "width": 60,
+                   "height": 60
+                  },
+                  {
+                   "url": "https://yt3.googleusercontent.com/cwVP46CNLlemtFI-x7mfb8wXHB6Hf6vMUWJSJ0hHdYuakocC9fzfOlF7TjKqqq9Q4MXAPd0nwAIlSg=w120-h120-l90-rj",
+                   "width": 120,
+                   "height": 120
+                  }
+                 ]
+                },
+                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FIT",
+                "trackingParams": "CM8CEIS_AiITCMLcg4jY8pYDFT3tVQkdeiEzDw=="
+               }
+              },
+              "flexColumns": [
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Inner Light",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CL4CEOFnGAIiEwjC3IOI2PKWAxU97VUJHXohMw-aAQMQ9CTKAQRUzorp",
+                     "watchEndpoint": {
+                      "videoId": "hJDBRYCDKo4",
+                      "watchEndpointMusicSupportedConfigs": {
+                       "watchEndpointMusicConfig": {
+                        "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                       }
+                      }
+                     }
+                    }
+                   }
+                  ]
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Elderbrook",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CL4CEOFnGAIiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "UClWkDlikoBvhfQMC0b2niUQ",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " & "
+                   },
+                   {
+                    "text": "Bob Moses",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CL4CEOFnGAIiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "UCgL2gcqZUfetx_S9UgnBmgg",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "Inner Light",
+                    "navigationEndpoint": {
+                     "clickTrackingParams": "CL4CEOFnGAIiEwjC3IOI2PKWAxU97VUJHXohMw_KAQRUzorp",
+                     "browseEndpoint": {
+                      "browseId": "MPREb_P9IjG9QvECo",
+                      "browseEndpointContextSupportedConfigs": {
+                       "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                       }
+                      }
+                     }
+                    }
+                   },
+                   {
+                    "text": " • "
+                   },
+                   {
+                    "text": "4:18"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "Elderbrook & Bob Moses • Inner Light • 4 minutes, 18 seconds"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               },
+               {
+                "musicResponsiveListItemFlexColumnRenderer": {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "109M plays"
+                   }
+                  ],
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "109 million plays"
+                   }
+                  }
+                 },
+                 "displayPriority": "MUSIC_RESPONSIVE_LIST_ITEM_COLUMN_DISPLAY_PRIORITY_HIGH"
+                }
+               }
+              ],
+              "playlistItemData": {
+               "videoId": "hJDBRYCDKo4"
+              }
+             }
+            }
+           ]
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}
