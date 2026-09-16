@@ -20,7 +20,8 @@ function resolveRelay(): string {
     }
     params.delete('relay');
     const rest = params.toString();
-    history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : ''));
+    // Keep the fragment: it may carry a party link.
+    history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
   }
   let override: string | null = null;
   try {

@@ -7,6 +7,7 @@
 //   --party            start a party on connect and print the guest link
 //   --web=URL          website the printed links point at (default http://localhost:5173)
 //   --song-seconds=N   pretend every song is N seconds long, to watch the queue advance
+//   --end-party-after=N  end the party N seconds after connecting (tests the guest "party over" flow)
 import WebSocket from 'ws';
 import { randomBytes } from 'node:crypto';
 
@@ -18,6 +19,7 @@ const RELAY = (args.find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:8787')
 const WEB = (flagValue('web') ?? 'http://localhost:5173').replace(/\/+$/, '');
 const SONG_SECONDS = Number(flagValue('song-seconds')) || null;
 const AUTO_PARTY = !!flag('party');
+const END_PARTY_AFTER = Number(flagValue('end-party-after')) || null;
 const GUEST_LIMIT = 3;
 
 const device = { id: randomBytes(16).toString('hex').slice(0, 26), secret: randomBytes(32).toString('base64url') };
@@ -33,6 +35,7 @@ let party = { active: false };
 /** Upcoming requests, plus the requested song playing now (null while something else plays). */
 let queue = { current: null, items: [] };
 let endTimer = null;
+let pairTimer = null;
 let ws;
 
 function log(...parts) {
@@ -297,8 +300,12 @@ function connect() {
       send({ type: 'pair.create' });
       onParty(msg.party ?? { active: false });
       if (AUTO_PARTY && !party.active) send({ type: 'party.start' });
+      if (END_PARTY_AFTER) setTimeout(() => send({ type: 'party.end' }), END_PARTY_AFTER * 1000);
     } else if (msg.type === 'pair.code') {
       log(`PAIRING CODE: ${msg.code}   (valid 5 minutes)   ${WEB}/?code=${msg.code}`);
+      // Keep a usable code around for linking browsers while developing.
+      clearTimeout(pairTimer);
+      pairTimer = setTimeout(() => send({ type: 'pair.create' }), Math.max(10_000, msg.expiresAt - Date.now() - 5_000));
     } else if (msg.type === 'clients') {
       log(`linked browsers: ${msg.clients.map((c) => c.name).join(', ') || 'none'}`);
     } else if (msg.type === 'party') {

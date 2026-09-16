@@ -2,6 +2,7 @@
 // socket alive, route command results, reconnect with backoff.
 import { RELAY_URL } from './config';
 import type { Pairing } from './pairing';
+import type { GuestSession } from './party';
 
 export interface PhoneState {
   source?: string;
@@ -34,15 +35,61 @@ export interface SearchResult {
   thumbnail: string | null;
 }
 
+export interface Requester {
+  id: string;
+  name: string;
+  role: 'guest' | 'client' | 'host';
+}
+
+export interface QueueItem {
+  itemId: string;
+  videoId: string;
+  title: string;
+  artist: string | null;
+  album: string | null;
+  durationMs: number | null;
+  thumbnail: string | null;
+  /** The first entry added the song; later ones asked for it again. */
+  requestedBy: Requester[];
+  addedAt: number;
+}
+
+export interface Queue {
+  /** The requested song playing now; null while something else plays. */
+  current: QueueItem | null;
+  items: QueueItem[];
+  limitPerGuest: number;
+}
+
+export interface PartyInfo {
+  active: boolean;
+  startedAt?: number;
+  guestCount?: number;
+  /** Only sent to linked browsers, so they can share the link. */
+  secret?: string;
+}
+
+export interface QueueAddResult {
+  itemId: string;
+  /** 0: playing now. */
+  position: number;
+  duplicate: boolean;
+}
+
 export type Link = 'connecting' | 'ready' | 'reconnecting';
+
+/** Why this browser can't connect any more. */
+export type Ended = 'revoked' | 'invalid' | 'party_ended';
 
 export interface RelayEvents {
   link: (link: Link) => void;
   presence: (deviceOnline: boolean) => void;
   state: (state: PhoneState | null) => void;
   artwork: (artwork: Artwork | null) => void;
-  /** The phone revoked this browser, or its credentials stopped working. */
-  unlinked: (reason: 'revoked' | 'invalid') => void;
+  queue: (queue: Queue | null) => void;
+  party: (party: PartyInfo) => void;
+  /** The phone revoked this browser, removed this guest, or the party ended. */
+  unlinked: (reason: Ended) => void;
 }
 
 export class RelayError extends Error {}
@@ -52,6 +99,11 @@ interface Pending {
   reject: (error: Error) => void;
   timer: number;
 }
+
+/** A linked browser (full remote) or a party guest. */
+export type Credentials = Pairing | GuestSession;
+
+export const isGuest = (c: Credentials): c is GuestSession => 'guestId' in c;
 
 export class Relay {
   private socket: WebSocket | null = null;
@@ -65,10 +117,17 @@ export class Relay {
   private readonly listeners = new Map<keyof RelayEvents, Array<(...args: unknown[]) => void>>();
 
   deviceOnline = false;
+  /** What the host's app supports, e.g. "queue" for party mode. */
+  features: string[] = [];
 
-  constructor(private readonly pairing: Pairing) {
+  constructor(readonly credentials: Credentials) {
     // Mobile browsers drop sockets in the background; come straight back.
     document.addEventListener('visibilitychange', this.onVisible);
+  }
+
+  /** This browser's id as the phone sees it (for "You" next to your own requests). */
+  get selfId(): string {
+    return isGuest(this.credentials) ? this.credentials.guestId : this.credentials.clientId;
   }
 
   on<K extends keyof RelayEvents>(event: K, fn: RelayEvents[K]): void {
@@ -85,12 +144,15 @@ export class Relay {
     window.clearTimeout(this.reconnectTimer);
     if (this.socket || this.stopped) return;
 
-    const ws = new WebSocket(`${RELAY_URL.replace(/^http/, 'ws')}/v1/ws?device=${encodeURIComponent(this.pairing.deviceId)}`);
+    const c = this.credentials;
+    const ws = new WebSocket(`${RELAY_URL.replace(/^http/, 'ws')}/v1/ws?device=${encodeURIComponent(c.deviceId)}`);
     this.socket = ws;
     this.emit('link', 'connecting');
 
     ws.addEventListener('open', () => {
-      ws.send(JSON.stringify({ type: 'auth', role: 'client', clientId: this.pairing.clientId, token: this.pairing.token }));
+      ws.send(JSON.stringify(isGuest(c)
+        ? { type: 'auth', role: 'guest', guestId: c.guestId, token: c.token }
+        : { type: 'auth', role: 'client', clientId: c.clientId, token: c.token }));
     });
 
     ws.addEventListener('message', (event) => {
@@ -111,9 +173,13 @@ export class Relay {
       window.clearInterval(this.keepAliveTimer);
       this.failPending('connection_lost');
 
-      if (event.code === 4001 || event.code === 4003) {
+      const ended: Ended | null = event.code === 4003 ? 'revoked'
+        : event.code === 4004 ? 'party_ended'
+        : event.code === 4001 ? 'invalid'
+        : null;
+      if (ended) {
         this.stopped = true;
-        this.emit('unlinked', event.code === 4003 ? 'revoked' : 'invalid');
+        this.emit('unlinked', ended);
         return;
       }
       if (this.stopped) return;
@@ -157,6 +223,7 @@ export class Relay {
         this.backoff = 1000;
         this.ready = true;
         this.deviceOnline = Boolean(msg.deviceOnline);
+        this.features = Array.isArray(msg.features) ? (msg.features as string[]) : [];
         window.clearInterval(this.keepAliveTimer);
         // Keeps proxies and NATs from silently dropping an idle socket.
         this.keepAliveTimer = window.setInterval(() => {
@@ -164,6 +231,8 @@ export class Relay {
         }, 30_000);
         this.emit('link', 'ready');
         this.emit('presence', this.deviceOnline);
+        this.emit('party', (msg.party as PartyInfo | undefined) ?? { active: false });
+        this.emit('queue', (msg.queue as Queue | null) ?? null);
         this.emit('state', (msg.state as PhoneState | null) ?? null);
         this.emit('artwork', (msg.artwork as Artwork | null) ?? null);
         return;
@@ -173,8 +242,15 @@ export class Relay {
       case 'artwork':
         this.emit('artwork', (msg.artwork as Artwork | null) ?? null);
         return;
+      case 'queue':
+        this.emit('queue', (msg.queue as Queue | null) ?? null);
+        return;
+      case 'party':
+        this.emit('party', (msg.party as PartyInfo | undefined) ?? { active: false });
+        return;
       case 'presence':
         this.deviceOnline = Boolean(msg.deviceOnline);
+        if (Array.isArray(msg.features)) this.features = msg.features as string[];
         this.emit('presence', this.deviceOnline);
         return;
       case 'result': {
@@ -212,6 +288,14 @@ const MESSAGES: Record<string, string> = {
   overlay_permission_missing: 'On the phone, allow Auxparty to "display over other apps" so it can start songs.',
   rate_limited: 'Slow down a little.',
   timeout: "The phone didn't answer in time.",
+  forbidden: 'Only the host can do that.',
+  party_off: "The host isn't running a party right now.",
+  limit_reached: "You've got enough songs waiting. Add more once one of yours plays.",
+  queue_full: 'The queue is full. Try again after a few songs.',
+  not_found: 'That song already left the queue.',
+  not_yours: 'You can only remove songs you added.',
+  bad_request: "That song can't be added.",
+  unknown_action: 'The Auxparty app on the host phone needs an update for this.',
 };
 
 /** A sentence for the user from a relay or phone error code. */

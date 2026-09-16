@@ -3,6 +3,7 @@ import { APK_URL, APP_NAME } from '../config';
 import { normalizeCode, pair, PairingError, type Pairing } from '../pairing';
 import { h, icon, svg } from '../ui/dom';
 import { loadingIndicator } from '../ui/feedback';
+import type { IconName } from '../ui/icons';
 import { cookie, morphPath } from '../ui/shapes';
 
 export interface PairOptions {
@@ -13,12 +14,12 @@ export interface PairOptions {
   onPaired: (pairing: Pairing) => void;
 }
 
-export function renderPair(root: HTMLElement, opts: PairOptions): void {
-  // ---------------------------------------------------------------- hero
+/** A slowly turning cookie shape with an icon: the hero on the pair and join screens. */
+export function shapeHero(glyph: IconName): HTMLElement {
   const heroPath = svg('path');
   const hero = h('div', { class: 'pair-hero', 'aria-hidden': 'true' },
     svg('svg', { viewBox: '0 0 1 1', class: 'pair-hero-shape' }, heroPath),
-    h('span', { class: 'pair-hero-icon' }, icon('music_note')),
+    h('span', { class: 'pair-hero-icon' }, icon(glyph)),
   );
   const shape = cookie(9);
   let angle = 0;
@@ -32,6 +33,11 @@ export function renderPair(root: HTMLElement, opts: PairOptions): void {
   };
   heroPath.setAttribute('d', morphPath(shape, shape, 0));
   requestAnimationFrame(spin);
+  return hero;
+}
+
+export function renderPair(root: HTMLElement, opts: PairOptions): void {
+  const hero = shapeHero('music_note');
 
   // ----------------------------------------------------------- code field
   const input = h('input', {

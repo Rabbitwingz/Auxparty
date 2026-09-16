@@ -1,7 +1,12 @@
 // Remote screen: now playing on the host's phone, and search to pick what's next.
+// During a party it also shows the queue, and picks are requests instead of plays.
 import { APK_URL, SOURCE_URL } from '../config';
 import { clearPairing } from '../pairing';
-import { explain, Relay, type Artwork, type Link, type PhoneState, type SearchResult } from '../relay';
+import { clearGuest, partyLinkUrl } from '../party';
+import {
+  explain, Relay,
+  type Artwork, type Ended, type Link, type PartyInfo, type PhoneState, type Queue, type QueueAddResult, type SearchResult,
+} from '../relay';
 import { setThemeMode, themeFromArtwork, themeMode, type ThemeMode } from '../theme';
 import { MorphingArtwork } from '../ui/artwork';
 import { h, icon } from '../ui/dom';
@@ -9,43 +14,59 @@ import { confirmDialog, loadingIndicator, snackbar } from '../ui/feedback';
 import { Slider } from '../ui/slider';
 import { WavyProgress } from '../ui/wavy';
 import { brand } from './pair';
+import { QueuePanel } from './queue';
 
 /**
- * `owner` is a browser linked by the host (full control). A future `guest` role,
- * joining a shared room, would reuse this screen with fewer controls: search and
- * add to the queue, but no transport or volume.
+ * `owner` is a browser linked by the host with a code: full control. `guest` joined a
+ * party through its link: sees everything, but can only search and request songs.
  */
 export type Role = 'owner' | 'guest';
 
 export interface RemoteOptions {
   relay: Relay;
   role: Role;
-  onUnlinked: (message: string) => void;
+  /** This browser can't connect any more (unlinked, removed, party over), or left. */
+  onEnded: (reason: Ended | 'left', message: string) => void;
 }
 
-export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: RemoteOptions): void {
+export function renderRemote(root: HTMLElement, { relay, role, onEnded }: RemoteOptions): void {
   const view = {
     link: 'connecting' as Link,
     online: false,
     state: null as PhoneState | null,
     artwork: null as Artwork | null,
     receivedAt: 0,
+    queue: null as Queue | null,
+    party: { active: false } as PartyInfo,
   };
   const canControl = role === 'owner';
+  const partyOn = () => view.party.active;
 
   // ------------------------------------------------------------- top bar
   const chip = h('span', { class: 'chip label-large', role: 'status' });
   const menuButton = h('button', { class: 'icon-btn state', type: 'button', 'aria-label': 'Menu', 'aria-haspopup': 'true' }, icon('more_vert'));
-  const menu = buildMenu(menuButton, async () => {
-    const ok = await confirmDialog({
-      title: 'Unlink this browser?',
-      body: "You'll need a new code from the host to control the music from here again.",
-      confirm: 'Unlink',
-    });
-    if (!ok) return;
-    relay.disconnect();
-    clearPairing();
-    onUnlinked('This browser is unlinked.');
+  const menu = buildMenu(menuButton, role, {
+    leave: async () => {
+      const ok = await confirmDialog(canControl
+        ? { title: 'Unlink this browser?', body: "You'll need a new code from the host to control the music from here again.", confirm: 'Unlink' }
+        : { title: 'Leave the party?', body: 'Your songs stay in the queue. Open the party link again to rejoin.', confirm: 'Leave' });
+      if (!ok) return;
+      relay.disconnect();
+      if (canControl) clearPairing();
+      else clearGuest();
+      onEnded('left', canControl ? 'This browser is unlinked.' : 'You left the party.');
+    },
+    copyLink: async () => {
+      const secret = view.party.secret;
+      if (!view.party.active || !secret) return snackbar('Start a party in the Auxparty app first.');
+      const url = partyLinkUrl(relay.credentials.deviceId, secret);
+      try {
+        await navigator.clipboard.writeText(url);
+        snackbar('Party link copied. Anyone with it can add songs.');
+      } catch {
+        snackbar(url);
+      }
+    },
   });
 
   // --------------------------------------------------------------- player
@@ -53,18 +74,19 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
   const source = h('div', { class: 'label-large-emphasized source' });
   const title = h('h1', { class: 'headline-medium-emphasized title' });
   const artist = h('div', { class: 'title-medium artist' });
+  const requested = h('div', { class: 'requested label-large', hidden: true });
   const elapsed = h('span', { class: 'label-medium' });
   const total = h('span', { class: 'label-medium' });
 
   const progress = new WavyProgress({
-    label: 'Seek',
-    onSeek: (fraction) => {
+    label: canControl ? 'Seek' : 'Song progress',
+    onSeek: canControl ? (fraction) => {
       const s = view.state;
       if (!s?.durationMs || !view.online) return;
       const positionMs = Math.round(fraction * s.durationMs);
       patchState({ positionMs, positionAt: Date.now() });
       relay.command('seek', { positionMs }).catch((e) => snackbar(explain(e)));
-    },
+    } : undefined,
   });
 
   const control = (name: 'skip_previous' | 'skip_next', label: string, action: string, cls: string) => {
@@ -93,7 +115,7 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
   const volumeRow = h('div', { class: 'volume' }, icon('volume_down'), volume.el, icon('volume_up'));
   const player = h('section', { class: 'player', 'aria-label': 'Now playing' },
     artwork.el,
-    h('div', { class: 'meta' }, source, title, artist),
+    h('div', { class: 'meta' }, source, title, artist, requested),
     h('div', { class: 'progress' }, progress.el, h('div', { class: 'times' }, elapsed, total)),
     canControl ? transport : null,
     canControl ? volumeRow : null,
@@ -116,8 +138,11 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
   const query = h('input', { type: 'search', placeholder: 'Search YouTube Music', 'aria-label': 'Search YouTube Music', enterkeyhint: 'search' });
   const clear = h('button', { class: 'icon-btn state', type: 'button', 'aria-label': 'Clear search', hidden: true }, icon('close'));
   const results = h('div', { class: 'results', 'aria-live': 'polite' });
+  const browseHeading = h('h2', { class: 'headline-small-emphasized' }, 'Pick a song');
+  const queuePanel = new QueuePanel(relay, canControl);
   const browse = h('section', { class: 'browse', 'aria-label': 'Search' },
-    h('h2', { class: 'headline-small-emphasized' }, 'Pick a song'),
+    queuePanel.el,
+    browseHeading,
     h('div', { class: 'search-bar' }, icon('search'), query, clear),
     results,
   );
@@ -165,28 +190,52 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
   function resultRow(r: SearchResult): HTMLElement {
     const img = h('img', { alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
     if (r.thumbnail) img.src = r.thumbnail.replace(/=w\d+-h\d+/, '=w120-h120');
+    const party = partyOn();
     const row = h('button', { class: 'list-item state', type: 'button' },
       img,
       h('div', { class: 'text' },
         h('div', { class: 'headline body-large' }, r.title),
         h('div', { class: 'supporting body-medium' }, [r.artist, r.album].filter(Boolean).join(' · '))),
-      h('span', { class: 'trailing label-medium' }, r.duration ?? ''),
+      party ? icon('playlist_add', 'Add to queue') : h('span', { class: 'trailing label-medium' }, r.duration ?? ''),
     );
-    row.addEventListener('click', async () => {
-      row.classList.add('busy');
+
+    const busyWhile = async (el: HTMLElement, run: () => Promise<void>) => {
+      el.classList.add('busy');
       try {
-        // Title and artist let the phone verify the right track started, and fall
-        // back to a search if YouTube Music ignores the id. The first pick after an
-        // app update may try several methods, hence the longer timeout.
-        await relay.command('playVideo', { videoId: r.videoId, title: r.title, artist: r.artist }, 30_000);
-        snackbar(`Playing “${r.title}”`);
+        await run();
       } catch (e) {
         snackbar(explain(e));
       } finally {
-        row.classList.remove('busy');
+        el.classList.remove('busy');
       }
+    };
+
+    // Title and artist let the phone verify the right track started, and fall back to
+    // a search if YouTube Music ignores the id. The first pick after an app update may
+    // try several methods, hence the longer timeout.
+    const playNow = () => busyWhile(row, async () => {
+      await relay.command('playVideo', { videoId: r.videoId, title: r.title, artist: r.artist }, 30_000);
+      snackbar(`Playing “${r.title}”`);
     });
-    return row;
+
+    const request = () => busyWhile(row, async () => {
+      const added = await relay.command<QueueAddResult>('queue.add', {
+        videoId: r.videoId, title: r.title, artist: r.artist, album: r.album, duration: r.duration, thumbnail: r.thumbnail,
+      }, 30_000);
+      snackbar(added.position === 0
+        ? (added.duplicate ? `“${r.title}” is playing now` : `Playing “${r.title}” now`)
+        : added.duplicate
+          ? `“${r.title}” is already coming up (#${added.position}). Added your name.`
+          : `Added “${r.title}” · #${added.position} in line`);
+    });
+
+    row.addEventListener('click', () => void (party ? request() : playNow()));
+    if (!party || !canControl) return row;
+
+    // Remotes can still skip the line.
+    const now = h('button', { class: 'icon-btn state', type: 'button', 'aria-label': `Play “${r.title}” now`, title: 'Play now' }, icon('play_arrow'));
+    now.addEventListener('click', () => void playNow());
+    return h('div', { class: 'result-row' }, row, now);
   }
 
   function emptyResults(message: string): HTMLElement {
@@ -195,9 +244,25 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
 
   function showSearchHint() {
     results.replaceChildren(h('div', { class: 'search-hint' },
-      h('span', { class: 'icon-tile large' }, icon('graphic_eq')),
-      h('p', { class: 'body-large' }, "Search for anything on YouTube Music. It plays on the host's phone, through their speakers."),
+      h('span', { class: 'icon-tile large' }, icon(partyOn() ? 'queue_music' : 'graphic_eq')),
+      h('p', { class: 'body-large' }, partyOn()
+        ? 'Search YouTube Music and add songs to the queue. They play in order on the host’s speakers.'
+        : "Search for anything on YouTube Music. It plays on the host's phone, through their speakers."),
     ));
+  }
+
+  /** Party on or off changes what a pick does, so redraw the hint and any results. */
+  let renderedParty: boolean | null = null;
+  function syncPartyMode() {
+    const on = partyOn();
+    browseHeading.textContent = on ? 'Request a song' : 'Pick a song';
+    query.placeholder = on ? 'Search for a song to add' : 'Search YouTube Music';
+    if (renderedParty === on) return;
+    const first = renderedParty === null;
+    renderedParty = on;
+    if (first) return;
+    if (query.value.trim()) void search();
+    else showSearchHint();
   }
 
   // ---------------------------------------------------------------- layout
@@ -278,7 +343,18 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
 
     source.textContent = hasTrack ? (s!.source ?? '').toUpperCase() : '';
     title.textContent = hasTrack ? s!.title! : 'Nothing playing';
-    artist.textContent = hasTrack ? [s!.artist, s!.album].filter(Boolean).join(' · ') : 'Pick a song below to start the music.';
+    artist.textContent = hasTrack
+      ? [s!.artist, s!.album].filter(Boolean).join(' · ')
+      : partyOn() ? 'Request a song below to get the party going.' : 'Pick a song below to start the music.';
+
+    // Who asked for this one, while a requested song is what's actually playing.
+    const current = partyOn() ? view.queue?.current ?? null : null;
+    const line = current && hasTrack && sameSong(current.title, s!.title!) ? queuePanel.requesterLine(current) : null;
+    requested.hidden = !line;
+    requested.replaceChildren(...(line ? [icon('person'), line] : []));
+
+    syncPartyMode();
+    queuePanel.render(view.queue, partyOn());
     miniTitle.textContent = s?.title ?? '';
     miniArtist.textContent = s?.artist ?? '';
 
@@ -330,19 +406,38 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
     view.artwork = art;
     render();
   });
+  relay.on('queue', (queue) => {
+    view.queue = queue;
+    render();
+  });
+  relay.on('party', (party) => {
+    view.party = party;
+    render();
+  });
   relay.on('unlinked', (reason) => {
-    clearPairing();
-    onUnlinked(reason === 'revoked'
-      ? 'The host removed this browser. Ask for a new code to join again.'
-      : 'This browser is no longer linked. Enter a new code to join.');
+    if (canControl) {
+      clearPairing();
+      onEnded(reason, reason === 'revoked'
+        ? 'The host removed this browser. Ask for a new code to join again.'
+        : 'This browser is no longer linked. Enter a new code to join.');
+    } else {
+      clearGuest();
+      onEnded(reason, reason === 'revoked' ? 'The host removed you from the party.' : 'The party has ended.');
+    }
   });
 
   render();
   relay.connect();
 }
 
-/** Overflow menu: theme, unlink, links. Uses the Popover API for light dismiss. */
-function buildMenu(anchor: HTMLButtonElement, onUnlink: () => void): HTMLElement {
+/** Loose title match: YouTube Music's session title vs. the search result's. */
+function sameSong(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  return norm(a) === norm(b);
+}
+
+/** Overflow menu: theme, party link, unlink or leave, links. Uses the Popover API for light dismiss. */
+function buildMenu(anchor: HTMLButtonElement, role: Role, actions: { leave: () => void; copyLink: () => void }): HTMLElement {
   const themeButtons: [ThemeMode, string][] = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
   const segmented = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Theme' });
   const syncTheme = () => {
@@ -358,18 +453,26 @@ function buildMenu(anchor: HTMLButtonElement, onUnlink: () => void): HTMLElement
   }
   syncTheme();
 
-  const unlink = h('button', { class: 'menu-item state', type: 'button' }, icon('link_off'), 'Unlink this browser');
+  const owner = role === 'owner';
+  const leave = h('button', { class: 'menu-item state', type: 'button' },
+    icon(owner ? 'link_off' : 'logout'), owner ? 'Unlink this browser' : 'Leave the party');
+  const copyLink = h('button', { class: 'menu-item state', type: 'button' }, icon('link'), 'Copy party link');
   const menu = h('div', { class: 'menu', id: 'app-menu', popover: 'auto' },
     h('div', { class: 'menu-section label-large' }, 'Theme'),
     segmented,
     h('hr', {}),
-    unlink,
+    owner ? copyLink : null,
+    leave,
     h('a', { class: 'menu-item state', href: APK_URL, rel: 'noopener' }, icon('smartphone'), 'Host with the Android app'),
     h('a', { class: 'menu-item state', href: SOURCE_URL, rel: 'noopener', target: '_blank' }, icon('open_in_new'), 'Source code'),
   );
-  unlink.addEventListener('click', () => {
+  leave.addEventListener('click', () => {
     menu.hidePopover();
-    onUnlink();
+    actions.leave();
+  });
+  copyLink.addEventListener('click', () => {
+    menu.hidePopover();
+    actions.copyLink();
   });
 
   anchor.setAttribute('popovertarget', 'app-menu');

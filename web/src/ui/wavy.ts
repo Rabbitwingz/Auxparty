@@ -35,11 +35,13 @@ export class WavyProgress {
 
     this.el = document.createElement('div');
     this.el.className = 'wavy';
-    this.el.setAttribute('role', 'slider');
+    // Without onSeek it only shows progress (e.g. for party guests).
+    this.el.setAttribute('role', opts.onSeek ? 'slider' : 'progressbar');
     this.el.setAttribute('aria-label', opts.label);
     this.el.setAttribute('aria-valuemin', '0');
     this.el.setAttribute('aria-valuemax', '100');
-    this.el.tabIndex = 0;
+    if (opts.onSeek) this.el.tabIndex = 0;
+    else this.el.classList.add('readonly');
     this.el.append(this.root);
 
     this.amp = new SpringValue(AMPLITUDE, springs.spatialDefault, (v) => {
