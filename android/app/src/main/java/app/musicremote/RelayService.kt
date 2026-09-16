@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import app.musicremote.party.PartyController
 
 /**
  * Keeps the relay connection alive while the app isn't on screen. A foreground
@@ -39,11 +40,13 @@ class RelayService : Service() {
 
     private val client by lazy { RelayClient.get(this) }
 
+    private val party by lazy { PartyController.get(this) }
+
     private val listener = object : RelayClient.Listener {
-        override fun onStatus(status: RelayClient.Status, error: String?) {
-            getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification(status))
-        }
+        override fun onStatus(status: RelayClient.Status, error: String?) = refreshNotification()
     }
+
+    private val partyListener = PartyController.Listener { refreshNotification() }
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +54,11 @@ class RelayService : Service() {
         goForeground()
         client.addListener(listener)
         client.start()
+        party.addListener(partyListener)
+    }
+
+    private fun refreshNotification() {
+        getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification(client.status))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -61,6 +69,7 @@ class RelayService : Service() {
 
     override fun onDestroy() {
         client.removeListener(listener)
+        party.removeListener(partyListener)
         client.stop()
         super.onDestroy()
     }
@@ -86,7 +95,10 @@ class RelayService : Service() {
 
     private fun notification(status: RelayClient.Status): Notification {
         val text = when (status) {
-            RelayClient.Status.CONNECTED -> "Friends can pick the music"
+            RelayClient.Status.CONNECTED -> party.state().let { p ->
+                val guests = if (p.guestCount == 1) "1 guest" else "${p.guestCount} guests"
+                if (p.active) "Party on · ${p.upcoming.size} in queue · $guests" else "Friends can pick the music"
+            }
             RelayClient.Status.CONNECTING -> "Connecting…"
             RelayClient.Status.OFFLINE -> "Offline, retrying"
         }

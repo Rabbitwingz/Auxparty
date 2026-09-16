@@ -26,6 +26,8 @@ data class NowPlaying(
     val state: String,
     val volume: Int,
     val maxVolume: Int,
+    /** The track's media id; YouTube Music uses the video id. */
+    val mediaId: String? = null,
 )
 
 /**
@@ -202,6 +204,7 @@ class MediaBridge private constructor(private val context: Context) {
             state = stateName(ps?.state),
             volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
             maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+            mediaId = md?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
         )
     }
 

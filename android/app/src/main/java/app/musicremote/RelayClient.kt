@@ -8,6 +8,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
+import app.musicremote.party.PartyController
+import app.musicremote.party.Requester
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -47,6 +49,10 @@ class RelayClient private constructor(private val context: Context) {
         private const val MAX_BACKOFF_MS = 60_000L
         private const val SEARCH_LIMIT = 20
         private const val ARTWORK_MAX_PX = 320
+        /** Told to the relay so browsers know this build can run a party. */
+        private val FEATURES = listOf("queue")
+        /** What a party guest may ask for; the relay enforces this too. */
+        private val GUEST_ACTIONS = setOf("search", "queue.add", "queue.remove")
 
         @Volatile private var instance: RelayClient? = null
 
@@ -61,6 +67,11 @@ class RelayClient private constructor(private val context: Context) {
     private val scope = MainScope()
     private val bridge = MediaBridge.get(context)
     private val publisher = StatePublisher()
+    private val party: PartyController by lazy {
+        PartyController.get(context).also { p ->
+            p.sendQueue = { queue -> send(JSONObject().put("type", "queue").put("queue", queue ?: JSONObject.NULL)) }
+        }
+    }
 
     // Protocol-level pings every 25s notice a dead connection (e.g. a NAT
     // mapping dropped while the phone slept) and trigger a reconnect.
@@ -98,6 +109,8 @@ class RelayClient private constructor(private val context: Context) {
         registerNetworkCallback()
         bridge.start()
         bridge.addListener(onMedia)
+        // A party that was running before the app restarted resumes watching playback now.
+        party.isActive
         open()
     }
 
@@ -128,6 +141,15 @@ class RelayClient private constructor(private val context: Context) {
 
     fun revoke(clientId: String): Boolean = send(JSONObject().put("type", "clients.revoke").put("clientId", clientId))
 
+    /** Party mode. Replies arrive through [PartyController]'s listeners. */
+    fun startParty(): Boolean = send(JSONObject().put("type", "party.start"))
+
+    fun endParty(): Boolean = send(JSONObject().put("type", "party.end"))
+
+    fun newPartyLink(): Boolean = send(JSONObject().put("type", "party.newLink"))
+
+    fun removeGuest(guestId: String): Boolean = send(JSONObject().put("type", "guests.remove").put("guestId", guestId))
+
     // ------------------------------------------------------------ connection
 
     private fun open() {
@@ -141,7 +163,12 @@ class RelayClient private constructor(private val context: Context) {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 // First message authenticates; the secret never goes in the URL.
                 webSocket.send(
-                    JSONObject().put("type", "auth").put("role", "device").put("secret", device.secret).toString()
+                    JSONObject()
+                        .put("type", "auth")
+                        .put("role", "device")
+                        .put("secret", device.secret)
+                        .put("features", JSONArray(FEATURES))
+                        .toString()
                 )
             }
 
@@ -221,7 +248,13 @@ class RelayClient private constructor(private val context: Context) {
                 updateClients(msg.optJSONArray("clients"))
                 publisher.reset()
                 publish(bridge.snapshot())
+                // The phone owns the queue: after reconnecting, the relay's copy may be stale.
+                party.onRelayParty(msg.optJSONObject("party"))
+                party.onRelayGuests(msg.optJSONArray("guests"))
+                party.republish()
             }
+            "party" -> party.onRelayParty(msg.optJSONObject("party"))
+            "guests" -> party.onRelayGuests(msg.optJSONArray("guests"))
             "cmd" -> execute(msg)
             "pair.code" -> {
                 val code = PairCode(msg.optString("code"), msg.optLong("expiresAt"))
@@ -244,11 +277,17 @@ class RelayClient private constructor(private val context: Context) {
             ok(null)
         }
 
-        when (msg.optString("action")) {
+        val action = msg.optString("action")
+        // Set by the relay. Older relays don't send it: then it's a linked browser.
+        val from = Requester.fromJson(msg.optJSONObject("from")) ?: Requester("unknown", "Remote", "client")
+        if (from.isGuest && action !in GUEST_ACTIONS) return fail("forbidden")
+
+        when (action) {
             "play" -> transport { bridge.play() }
             "pause" -> transport { bridge.pause() }
             "playPause" -> transport { bridge.playPause() }
-            "next" -> transport { bridge.next() }
+            // During a party, "next" means the next request, when there is one.
+            "next" -> if (party.skip()) ok(null) else transport { bridge.next() }
             "previous" -> transport { bridge.previous() }
             "seek" -> {
                 val position = args.optLong("positionMs", -1)
@@ -270,7 +309,10 @@ class RelayClient private constructor(private val context: Context) {
                 val artist = args.optString("artist").ifEmpty { null }
                 scope.launch {
                     when (val outcome = BackgroundPlayer.get(context).play(videoId, title, artist)) {
-                        is BackgroundPlayer.Outcome.Played -> ok(JSONObject().put("method", outcome.method.name))
+                        is BackgroundPlayer.Outcome.Played -> {
+                            party.onHostPlayed()
+                            ok(JSONObject().put("method", outcome.method.name))
+                        }
                         is BackgroundPlayer.Outcome.Failed -> fail(outcome.reason)
                     }
                 }
@@ -296,6 +338,11 @@ class RelayClient private constructor(private val context: Context) {
                     }
                 }
             }
+            "queue.add", "queue.remove", "queue.move", "queue.clear" ->
+                when (val result = party.command(action, args, from)) {
+                    is PartyController.CommandResult.Ok -> ok(result.data)
+                    is PartyController.CommandResult.Error -> fail(result.error)
+                }
             else -> fail("unknown_action")
         }
     }
