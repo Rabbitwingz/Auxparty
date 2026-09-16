@@ -42,7 +42,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.musicremote.MediaBridge
 import app.musicremote.SearchResult
-import app.musicremote.YtMusicLauncher
+import app.musicremote.BackgroundPlayer
 import app.musicremote.YtMusicSearch
 import app.musicremote.ui.components.SectionLabel
 import app.musicremote.ui.icons.AuxIcons
@@ -75,15 +75,16 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     }
 
     fun play(result: SearchResult, fromBackground: Boolean) {
-        val app = context.applicationContext
         scope.launch {
             if (fromBackground) {
                 note("Playing \"${result.title}\" in 8s. Press Home now.")
                 delay(8_000)
             }
-            when (val outcome = YtMusicLauncher.playVideo(app, result.videoId)) {
-                is YtMusicLauncher.Result.Started -> note("Started in ${outcome.packageName}")
-                is YtMusicLauncher.Result.Failed -> note("Failed: ${outcome.reason}")
+            // The same path a browser's pick takes: background first, launch last.
+            val outcome = BackgroundPlayer.get(context).play(result.videoId, result.title, result.artist, log = ::note)
+            when (outcome) {
+                is BackgroundPlayer.Outcome.Played -> note("Result: played via ${outcome.method}")
+                is BackgroundPlayer.Outcome.Failed -> note("Result: failed, ${outcome.reason}")
             }
         }
     }
@@ -116,7 +117,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "Tap a result to play it. Long-press to start it 8 seconds later, then press Home: that's how songs start when a friend picks them.",
+                    "Tap a result to play it the way a friend's pick does: in the background, without opening YouTube Music. Long-press to start it 8 seconds later, then press Home.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -148,6 +149,15 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     ) { Text("Ask app to search") }
                     if (searching) LoadingIndicator(Modifier.size(36.dp))
                 }
+            }
+            item {
+                FilledTonalButton(
+                    onClick = {
+                        BackgroundPlayer.get(context).forget()
+                        note("Forgot the remembered playback method; the next pick re-tests all of them")
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text("Re-test playback methods") }
             }
             items(results, key = { it.videoId }) { result ->
                 Surface(

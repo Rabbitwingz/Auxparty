@@ -16,6 +16,8 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -56,6 +58,7 @@ class RelayClient private constructor(private val context: Context) {
 
     private val main = Handler(Looper.getMainLooper())
     private val workers = Executors.newFixedThreadPool(2)
+    private val scope = MainScope()
     private val bridge = MediaBridge.get(context)
     private val publisher = StatePublisher()
 
@@ -259,16 +262,24 @@ class RelayClient private constructor(private val context: Context) {
                     ok(null)
                 }
             }
-            "playVideo", "playPlaylist" -> {
+            "playVideo" -> {
+                // Starts the track through YouTube Music's media session so its
+                // screen doesn't open; only falls back to launching the app.
+                val videoId = args.optString("videoId")
+                val title = args.optString("title").ifEmpty { null }
+                val artist = args.optString("artist").ifEmpty { null }
+                scope.launch {
+                    when (val outcome = BackgroundPlayer.get(context).play(videoId, title, artist)) {
+                        is BackgroundPlayer.Outcome.Played -> ok(JSONObject().put("method", outcome.method.name))
+                        is BackgroundPlayer.Outcome.Failed -> fail(outcome.reason)
+                    }
+                }
+            }
+            "playPlaylist" -> {
                 // Without this permission Android silently ignores the launch
                 // while the app is in the background, so say so instead.
                 if (!Settings.canDrawOverlays(context)) return fail("overlay_permission_missing")
-                val result = if (msg.optString("action") == "playVideo") {
-                    YtMusicLauncher.playVideo(context, args.optString("videoId"))
-                } else {
-                    YtMusicLauncher.playPlaylist(context, args.optString("playlistId"))
-                }
-                when (result) {
+                when (val result = YtMusicLauncher.playPlaylist(context, args.optString("playlistId"))) {
                     is YtMusicLauncher.Result.Started -> ok(null)
                     is YtMusicLauncher.Result.Failed -> fail(result.reason)
                 }

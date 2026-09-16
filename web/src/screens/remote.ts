@@ -175,7 +175,10 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
     row.addEventListener('click', async () => {
       row.classList.add('busy');
       try {
-        await relay.command('playVideo', { videoId: r.videoId });
+        // Title and artist let the phone verify the right track started, and fall
+        // back to a search if YouTube Music ignores the id. The first pick after an
+        // app update may try several methods, hence the longer timeout.
+        await relay.command('playVideo', { videoId: r.videoId, title: r.title, artist: r.artist }, 30_000);
         snackbar(`Playing “${r.title}”`);
       } catch (e) {
         snackbar(explain(e));

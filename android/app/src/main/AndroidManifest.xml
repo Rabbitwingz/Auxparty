@@ -19,6 +19,10 @@
     <!-- Package visibility (Android 11+): see which apps open music.youtube.com links,
          without asking for QUERY_ALL_PACKAGES. -->
     <queries>
+        <!-- YouTube Music's media browser service, to start tracks without its UI. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="music.youtube.com" />

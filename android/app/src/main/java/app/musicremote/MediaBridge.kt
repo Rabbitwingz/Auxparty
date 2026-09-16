@@ -133,6 +133,16 @@ class MediaBridge private constructor(private val context: Context) {
 
     fun hasSession(): Boolean = controller != null
 
+    /**
+     * The active session of a specific app, which isn't necessarily the one being
+     * followed (e.g. starting YouTube Music while Plex is playing).
+     */
+    fun controllerFor(pkg: String): MediaController? = try {
+        if (hasNotificationAccess()) sessionManager.getActiveSessions(listenerComponent).firstOrNull { it.packageName == pkg } else null
+    } catch (e: SecurityException) {
+        null
+    }
+
     fun play() {
         controller?.transportControls?.play()
     }
