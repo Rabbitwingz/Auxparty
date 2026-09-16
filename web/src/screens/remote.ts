@@ -208,9 +208,13 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
 
   // Phones: when the player scrolls away, a mini player takes over at the bottom.
   const compact = matchMedia('(max-width: 899px)');
+  let playerMostlyHidden = false;
+  // isIntersecting stays true while any sliver is visible, so compare the ratio,
+  // and observe at 0 too so fully scrolling past still reports.
   new IntersectionObserver(([entry]) => {
-    mini.hidden = !compact.matches || entry.isIntersecting || !view.state?.title;
-  }, { threshold: 0.15 }).observe(player);
+    playerMostlyHidden = entry.intersectionRatio < 0.15;
+    mini.hidden = !compact.matches || !playerMostlyHidden || !view.state?.title;
+  }, { threshold: [0, 0.15] }).observe(player);
 
   // ------------------------------------------------------------ behaviour
   function togglePlay() {
@@ -234,8 +238,10 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
     if (s?.positionMs == null) return null;
     let pos = s.positionMs;
     if (s.playback === 'playing' && view.online) {
-      // positionAt is the phone's clock. If the clocks disagree wildly, trust arrival time.
-      const since = Math.abs(Date.now() - (s.positionAt ?? 0)) < 60_000 ? s.positionAt! : view.receivedAt;
+      // positionAt is the phone's clock. It can legitimately be long ago (the relay
+      // replays its cached state on connect), but never meaningfully in the future;
+      // if it is, the clocks disagree, so count from when the state arrived instead.
+      const since = s.positionAt && s.positionAt <= Date.now() + 5_000 ? s.positionAt : view.receivedAt;
       pos += Date.now() - since;
     }
     return s.durationMs ? Math.min(Math.max(pos, 0), s.durationMs) : Math.max(pos, 0);
@@ -296,7 +302,8 @@ export function renderRemote(root: HTMLElement, { relay, role, onUnlinked }: Rem
       volume.setMax(s.maxVolume);
       volume.set(s.volume ?? 0);
     }
-    if (!hasTrack) mini.hidden = true;
+    // Also re-evaluated when a track starts while the player is scrolled away.
+    mini.hidden = !hasTrack || !compact.matches || !playerMostlyHidden;
     tick();
   }
 
