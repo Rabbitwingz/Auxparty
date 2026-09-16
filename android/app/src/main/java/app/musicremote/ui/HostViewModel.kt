@@ -14,23 +14,29 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.musicremote.AppPrefs
+import app.musicremote.BackgroundPlayer
 import app.musicremote.MediaBridge
 import app.musicremote.NowPlaying
 import app.musicremote.RelayClient
 import app.musicremote.RelayService
+import app.musicremote.SearchResult
 import app.musicremote.StatePublisher
 import app.musicremote.ThemeMode
 import app.musicremote.YtMusicLauncher
+import app.musicremote.YtMusicSearch
 import app.musicremote.party.PartyController
+import app.musicremote.party.Requester
 import app.musicremote.ui.state.Connection
 import app.musicremote.ui.state.GuestUi
-import app.musicremote.ui.state.PartyUi
 import app.musicremote.ui.state.HostUiState
 import app.musicremote.ui.state.LinkedBrowserUi
 import app.musicremote.ui.state.NowPlayingUi
 import app.musicremote.ui.state.PairCodeUi
+import app.musicremote.ui.state.PartyUi
 import app.musicremote.ui.state.SetupState
+import app.musicremote.ui.state.hostErrorMessage
 import app.musicremote.ui.state.newlyLinked
+import app.musicremote.ui.state.queueAddMessage
 import app.musicremote.ui.theme.seedFromArtwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +47,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * Adapts the existing data layer (MediaBridge, RelayClient) into one immutable
@@ -287,6 +294,77 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(partyError = null) }
     }
 
+    // --------------------------------------------------------------- search
+
+    private var searchJob: Job? = null
+
+    /** Typing searches after a short pause; [now] searches immediately (keyboard search key). */
+    fun setSearchQuery(query: String, now: Boolean = false) {
+        _state.update { it.copy(search = it.search.copy(query = query)) }
+        searchJob?.cancel()
+        val q = query.trim()
+        if (q.isEmpty()) {
+            _state.update { it.copy(search = it.search.copy(searching = false, results = emptyList(), searched = false, error = null)) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            if (!now) delay(SEARCH_DEBOUNCE_MS)
+            _state.update { it.copy(search = it.search.copy(searching = true, error = null)) }
+            val outcome = withContext(Dispatchers.IO) { runCatching { YtMusicSearch.search(q).take(SEARCH_LIMIT) } }
+            _state.update {
+                it.copy(
+                    search = it.search.copy(
+                        searching = false,
+                        searched = true,
+                        results = outcome.getOrDefault(emptyList()),
+                        error = outcome.exceptionOrNull()?.let { "Search failed. Check the connection and try again." },
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Plays a result straight away, in the background like a browser's pick. */
+    fun playNow(result: SearchResult) {
+        if (_state.value.search.busyVideoId != null) return
+        _state.update { it.copy(search = it.search.copy(busyVideoId = result.videoId)) }
+        viewModelScope.launch {
+            val outcome = BackgroundPlayer.get(getApplication<Application>()).play(result.videoId, result.title, result.artist)
+            val message = when (outcome) {
+                is BackgroundPlayer.Outcome.Played -> {
+                    // During a party this is the host's own pick: it plays to the end, then the queue continues.
+                    party.onHostPlayed()
+                    "Playing “${result.title}”"
+                }
+                is BackgroundPlayer.Outcome.Failed -> hostErrorMessage(outcome.reason)
+            }
+            _state.update { it.copy(search = it.search.copy(busyVideoId = null, message = message)) }
+        }
+    }
+
+    /** Adds a result to the party queue as the host (no per-guest limit). */
+    fun addToQueue(result: SearchResult) {
+        val args = JSONObject()
+            .put("videoId", result.videoId)
+            .put("title", result.title)
+            .put("artist", result.artist ?: JSONObject.NULL)
+            .put("album", result.album ?: JSONObject.NULL)
+            .put("duration", result.duration ?: JSONObject.NULL)
+            .put("thumbnail", result.thumbnail ?: JSONObject.NULL)
+        val message = when (val outcome = party.command("queue.add", args, Requester.HOST)) {
+            is PartyController.CommandResult.Ok -> {
+                val data = outcome.data as? JSONObject
+                queueAddMessage(result.title, data?.optInt("position", 1) ?: 1, data?.optBoolean("duplicate") ?: false)
+            }
+            is PartyController.CommandResult.Error -> hostErrorMessage(outcome.code)
+        }
+        _state.update { it.copy(search = it.search.copy(message = message)) }
+    }
+
+    fun consumeSearchMessage() {
+        _state.update { it.copy(search = it.search.copy(message = null)) }
+    }
+
     // ---------------------------------------------------------------- setup
 
     /** Call whenever the app comes to the foreground: permissions change in Settings. */
@@ -323,5 +401,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val SEED_DEBOUNCE_MS = 300L
         const val PARTY_START_TIMEOUT_MS = 10_000L
+        const val SEARCH_DEBOUNCE_MS = 400L
+        const val SEARCH_LIMIT = 20
     }
 }

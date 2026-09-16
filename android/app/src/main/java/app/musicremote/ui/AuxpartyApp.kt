@@ -34,6 +34,8 @@ import app.musicremote.ui.home.InviteSheet
 import app.musicremote.ui.onboarding.OnboardingScreen
 import app.musicremote.ui.party.PartyActions
 import app.musicremote.ui.party.PartyScreen
+import app.musicremote.ui.search.SearchActions
+import app.musicremote.ui.search.SearchScreen
 import app.musicremote.ui.settings.SettingsActions
 import app.musicremote.ui.settings.SettingsScreen
 import app.musicremote.ui.state.Connection
@@ -47,6 +49,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val DIAGNOSTICS = "diagnostics"
     const val PARTY = "party"
+    const val SEARCH = "search"
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -124,6 +127,20 @@ fun AuxpartyApp(vm: HostViewModel) {
                         onEndParty = vm::endParty,
                         onOpenParty = { nav.navigate(Routes.PARTY) },
                         onShareParty = sharePartyLink,
+                        onSearch = { nav.navigate(Routes.SEARCH) },
+                    ),
+                )
+            }
+            composable(Routes.SEARCH) {
+                SearchScreen(
+                    search = state.search,
+                    partyActive = state.party.active,
+                    actions = SearchActions(
+                        onBack = { nav.popBackStack() },
+                        onQuery = vm::setSearchQuery,
+                        onPlayNow = vm::playNow,
+                        onAddToQueue = vm::addToQueue,
+                        onMessageShown = vm::consumeSearchMessage,
                     ),
                 )
             }
@@ -144,6 +161,7 @@ fun AuxpartyApp(vm: HostViewModel) {
                         onClear = vm::clearQueue,
                         onRemoveGuest = vm::removeGuest,
                         onGuestLimit = vm::setGuestLimit,
+                        onAddSongs = { nav.navigate(Routes.SEARCH) },
                     ),
                 )
             }

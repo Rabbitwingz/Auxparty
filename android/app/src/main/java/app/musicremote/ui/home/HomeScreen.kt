@@ -83,6 +83,7 @@ class HomeActions(
     val onEndParty: () -> Unit = {},
     val onOpenParty: () -> Unit = {},
     val onShareParty: (String) -> Unit = {},
+    val onSearch: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -96,6 +97,9 @@ fun HomeScreen(state: HostUiState, actions: HomeActions = HomeActions()) {
                 title = { Text("Auxparty", style = MaterialTheme.typography.titleLargeEmphasized) },
                 actions = {
                     ConnectionPill(state.connection)
+                    IconButton(onClick = actions.onSearch) {
+                        Icon(AuxIcons.Search, contentDescription = if (state.party.active) "Add songs" else "Search")
+                    }
                     IconButton(onClick = actions.onSettings) {
                         Icon(AuxIcons.Settings, contentDescription = "Settings")
                     }
@@ -242,7 +246,7 @@ private fun PartyCard(state: HostUiState, actions: HomeActions) {
 
             if (party.upcoming.isEmpty()) {
                 Text(
-                    "No requests yet. Share the link so friends can add songs.",
+                    "No requests yet. Add songs with search, or share the link so friends can.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -513,7 +517,7 @@ private fun NothingPlaying() {
         Text("Nothing playing", style = MaterialTheme.typography.headlineMediumEmphasized, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Start a song in YouTube Music, or invite a friend to pick one.",
+            "Search for a song, or invite a friend to pick one.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

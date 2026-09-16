@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +70,7 @@ class PartyActions(
     val onClear: () -> Unit = {},
     val onRemoveGuest: (String) -> Unit = {},
     val onGuestLimit: (Int) -> Unit = {},
+    val onAddSongs: () -> Unit = {},
 )
 
 private sealed interface Confirm {
@@ -102,10 +104,19 @@ fun PartyScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
+        floatingActionButton = {
+            if (party.active) {
+                ExtendedFloatingActionButton(
+                    onClick = actions.onAddSongs,
+                    icon = { Icon(AuxIcons.PlaylistAdd, null) },
+                    text = { Text("Add songs") },
+                )
+            }
+        },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding(), bottom = 32.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding(), bottom = 104.dp), // clear of the FAB
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             item(key = "share") {

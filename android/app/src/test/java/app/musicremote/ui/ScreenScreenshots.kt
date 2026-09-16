@@ -20,7 +20,9 @@ import app.musicremote.ui.home.HomeScreen
 import app.musicremote.ui.home.InviteContent
 import app.musicremote.ui.onboarding.OnboardingStep
 import app.musicremote.ui.party.PartyScreen
+import app.musicremote.ui.search.SearchScreen
 import app.musicremote.ui.state.PartyUi
+import app.musicremote.ui.state.SearchUi
 import app.musicremote.ui.settings.SettingsScreen
 import app.musicremote.ui.state.Connection
 import app.musicremote.ui.state.PairCodeUi
@@ -103,6 +105,27 @@ class ScreenScreenshots {
     @Test fun party_empty_dark() {
         val s = state().copy(party = PartyUi(active = true, link = Fixtures.party.link))
         compose.shoot("party_empty_dark", s, dark = true) { PartyScreen(s.party, now = NOW) }
+    }
+
+    // --------------------------------------------------------------- search
+
+    @Test fun search_results_party_light() {
+        val art = SampleArtwork.sunset()
+        val s = state(art, playing(art, "Golden Hour Drive", "The Midnight Arcade"))
+            .copy(party = Fixtures.party, search = SearchUi(query = "neon rain", searched = true, results = Fixtures.results, busyVideoId = "r3"))
+        compose.shoot("search_results_party_light", s, dark = false) { SearchScreen(s.search, partyActive = true, autoFocus = false) }
+    }
+
+    @Test fun search_results_remote_dark() {
+        val art = SampleArtwork.ocean()
+        val s = state(art, playing(art, "Tidal", "Harbour Lights"))
+            .copy(search = SearchUi(query = "neon rain", searched = true, results = Fixtures.results))
+        compose.shoot("search_results_remote_dark", s, dark = true) { SearchScreen(s.search, partyActive = false, autoFocus = false) }
+    }
+
+    @Test fun search_empty_party_dark() {
+        val s = state().copy(party = Fixtures.party)
+        compose.shoot("search_empty_party_dark", s, dark = true) { SearchScreen(s.search, partyActive = true, autoFocus = false) }
     }
 
     // --------------------------------------------------------------- invite

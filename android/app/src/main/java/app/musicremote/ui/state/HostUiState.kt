@@ -67,6 +67,7 @@ data class HostUiState(
     val party: PartyUi = PartyUi(),
     /** Why the last party action didn't go through, e.g. "offline". */
     val partyError: String? = null,
+    val search: SearchUi = SearchUi(),
 )
 
 // ------------------------------------------------------------- onboarding

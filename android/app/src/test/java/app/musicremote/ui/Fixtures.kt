@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onRoot
+import app.musicremote.SearchResult
 import app.musicremote.party.QueueItem
 import app.musicremote.party.Requester
 import app.musicremote.ui.state.Connection
@@ -70,6 +71,14 @@ object Fixtures {
             request("3", "Paper Planets", "Moth Parade", "Jo"),
             request("4", "Afterglow", "The Midnight Arcade", "Sam"),
         ),
+    )
+
+    val results = listOf(
+        SearchResult("r1", "Neon Rain", "Velvet Static", "Night Signals", "3:42", null),
+        SearchResult("r2", "Neon Rain (Acoustic)", "Velvet Static", "Night Signals (Deluxe)", "4:05", null),
+        SearchResult("r3", "Rain on Neon Streets", "Harbour Lights", "Tidal", "3:18", null),
+        SearchResult("r4", "Neon", "Moth Parade", "Paper Planets", "2:57", null),
+        SearchResult("r5", "After the Rain", "The Midnight Arcade", "Golden Hour", "5:11", null),
     )
 
     fun state(
