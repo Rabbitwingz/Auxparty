@@ -1,9 +1,6 @@
 # Node
 node_modules/
 
-# Bundled adb binaries (downloaded, not source)
-local-adb/tools/
-
 # Android / Gradle
 android/.gradle/
 android/build/

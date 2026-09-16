@@ -14,9 +14,8 @@ class PackagesTest {
 
     @Test
     fun ranksOtherSources() {
-        assertEquals(1, Packages.rank("com.plexapp.android"))
-        assertEquals(2, Packages.rank("app.morphe.android.youtube"))
-        assertEquals(3, Packages.rank("com.spotify.music"))
+        assertEquals(1, Packages.rank("app.morphe.android.youtube"))
+        assertEquals(2, Packages.rank("com.spotify.music"))
         assertEquals(9, Packages.rank("com.android.server.telecom"))
         assertEquals(9, Packages.rank(null))
     }

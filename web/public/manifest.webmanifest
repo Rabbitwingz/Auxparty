@@ -1,7 +1,7 @@
 {
   "name": "Auxparty",
   "short_name": "Auxparty",
-  "description": "Pick the music playing on a friend's phone.",
+  "description": "Pick the music playing on a friend's phone, or join their party and add songs to the queue.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
