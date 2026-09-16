@@ -1,8 +1,11 @@
 package app.musicremote
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
@@ -42,6 +45,33 @@ class MainActivity : Activity() {
     private lateinit var results: LinearLayout
     private lateinit var logView: TextView
 
+    private val relay by lazy { RelayClient.get(this) }
+    private lateinit var remoteStatus: TextView
+    private lateinit var pairCodeView: TextView
+    private lateinit var browsers: LinearLayout
+    private var pairCode: RelayClient.PairCode? = null
+
+    private val relayListener = object : RelayClient.Listener {
+        override fun onStatus(status: RelayClient.Status, error: String?) {
+            remoteStatus.text = when (status) {
+                RelayClient.Status.CONNECTED -> "🟢  Connected, ready for remote control"
+                RelayClient.Status.CONNECTING -> "🟡  Connecting…"
+                RelayClient.Status.OFFLINE -> "🔴  Offline${error?.let { ": $it" } ?: ""}"
+            }
+        }
+
+        override fun onPairCode(code: RelayClient.PairCode) {
+            pairCode = code
+            tickPairCode()
+        }
+
+        override fun onClients(clients: List<RelayClient.LinkedBrowser>) {
+            pairCode = relay.pairCode
+            tickPairCode()
+            renderBrowsers(clients)
+        }
+    }
+
     private var latest: NowPlaying? = null
     private var latestAt = 0L
 
@@ -54,6 +84,7 @@ class MainActivity : Activity() {
     private val ticker = object : Runnable {
         override fun run() {
             tickProgress()
+            tickPairCode()
             main.postDelayed(this, 500)
         }
     }
@@ -66,7 +97,20 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(16), dp(20), dp(48))
         }
 
-        root.addView(caption("Checks that this phone can be controlled remotely. Long-press a search result to test starting playback from the background."))
+        root.addView(section("Remote access"))
+        remoteStatus = text(15f)
+        root.addView(remoteStatus)
+        root.addView(row(button("Link a browser") {
+            if (!relay.requestPairCode()) log("Not connected to the relay yet")
+        }))
+        pairCodeView = text(15f).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(8), 0, dp(8))
+            visibility = View.GONE
+        }
+        root.addView(pairCodeView)
+        browsers = vertical()
+        root.addView(browsers)
 
         root.addView(section("Setup"))
         checks = vertical()
@@ -129,13 +173,57 @@ class MainActivity : Activity() {
         renderChecks()
         bridge.start()
         bridge.addListener(onState)
+        // Opening the app is always an allowed moment to start the service.
+        RelayService.start(this)
+        relay.addListener(relayListener)
         main.post(ticker)
     }
 
     override fun onPause() {
         super.onPause()
         bridge.removeListener(onState)
+        relay.removeListener(relayListener)
         main.removeCallbacks(ticker)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        renderChecks()
+    }
+
+    // ---------------------------------------------------------------- remote
+
+    private fun tickPairCode() {
+        val code = pairCode
+        val remaining = code?.let { it.expiresAt - System.currentTimeMillis() } ?: 0L
+        if (code == null || remaining <= 0) {
+            pairCodeView.visibility = View.GONE
+            return
+        }
+        pairCodeView.visibility = View.VISIBLE
+        val host = Uri.parse(BuildConfig.WEB_URL).host ?: BuildConfig.WEB_URL
+        pairCodeView.text = "On your computer, open $host and enter\n\n${code.code}\n\nExpires in ${formatTime(remaining)}"
+    }
+
+    private fun renderBrowsers(clients: List<RelayClient.LinkedBrowser>) {
+        browsers.removeAllViews()
+        if (clients.isEmpty()) {
+            browsers.addView(caption("No browsers linked yet."))
+            return
+        }
+        browsers.addView(caption("Linked browsers"))
+        for (c in clients) {
+            val seen = c.lastSeenAt?.let { "last used ${android.text.format.DateUtils.getRelativeTimeSpanString(it)}" } ?: "never used"
+            browsers.addView(row(
+                text(14f).apply {
+                    text = "${c.name}\n$seen"
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f)
+                },
+                button("Revoke") {
+                    if (relay.revoke(c.clientId)) log("Revoked ${c.name}") else log("Not connected to the relay")
+                },
+            ))
+        }
     }
 
     override fun onDestroy() {
@@ -170,6 +258,14 @@ class MainActivity : Activity() {
             "Stops Android — Samsung especially — from putting the app to sleep.",
             "Allow" to { open(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageUri())) },
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            addCheck(
+                "Notifications",
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+                "Shows a small notification while remote control is active, so you always know it's on.",
+                "Allow" to { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1) },
+            )
+        }
         addCheck(
             "YouTube Music installed",
             ytm != null,

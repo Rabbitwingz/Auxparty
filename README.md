@@ -18,9 +18,9 @@ that controls the music locally, and browsers talk to it through a relay.
 
 | Path | What | Status |
 | --- | --- | --- |
-| `android/` | Companion app (Kotlin, no third-party dependencies) | Phase 1: on-device diagnostics |
-| `relay/` | Cloudflare Worker + Durable Objects | Phase 2 |
-| `web/` | Browser UI, hosted on Vercel | Phase 3 |
+| `android/` | Companion app (Kotlin; OkHttp is the only dependency) | Relay client, pairing, diagnostics |
+| `relay/` | Cloudflare Worker + Durable Objects ([protocol](relay/PROTOCOL.md)) | Built, 17 integration tests |
+| `web/` | Static browser UI for Vercel, no build step | Built, verified end to end locally |
 | `local-adb/` | Original PC-only version driving the phone over ADB | Working; superseded |
 
 ## Design decisions
@@ -35,7 +35,22 @@ that controls the music locally, and browsers talk to it through a relay.
 - **Position = `position + (now − lastPositionUpdateTime) × speed`.** YouTube
   Music publishes position once per track; reading `position` alone reports 0.
 
-## Building
+## Local development
+
+Run the whole system without a phone. `relay/tools/fake-phone.mjs` speaks the
+device side of the protocol, with real YouTube Music search results:
+
+```
+npm --prefix relay install
+npm --prefix relay run dev -- --port 8787     # relay
+node web/dev-server.mjs 5173                  # web UI
+node relay/tools/fake-phone.mjs               # prints a pairing code
+```
+
+Then open `http://127.0.0.1:5173/?relay=http://127.0.0.1:8787` and enter the code.
+Relay tests: `npm --prefix relay test`.
+
+## Building the app
 
 There is no local build. GitHub Actions builds every push to `main`, runs the
 unit tests, and publishes the APK to a rolling release:

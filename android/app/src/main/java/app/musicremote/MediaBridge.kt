@@ -131,6 +131,16 @@ class MediaBridge private constructor(private val context: Context) {
 
     // ---------------------------------------------------------------- control
 
+    fun hasSession(): Boolean = controller != null
+
+    fun play() {
+        controller?.transportControls?.play()
+    }
+
+    fun pause() {
+        controller?.transportControls?.pause()
+    }
+
     fun playPause() {
         val c = controller ?: return
         if (c.playbackState?.state == PlaybackState.STATE_PLAYING) {

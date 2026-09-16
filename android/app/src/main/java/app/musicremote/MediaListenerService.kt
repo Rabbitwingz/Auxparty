@@ -15,6 +15,9 @@ class MediaListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         MediaBridge.get(applicationContext).start()
+        // The system rebinds listeners on its own (after boot, after the process
+        // is killed), which makes this a dependable moment to reconnect.
+        RelayService.start(applicationContext)
     }
 
     override fun onListenerDisconnected() {
