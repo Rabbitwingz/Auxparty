@@ -52,6 +52,8 @@
 
 .remote {
   display: grid;
+  /* minmax(0, …) lets columns shrink below their content, so nothing overflows sideways. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 1200px;
   margin: 0 auto;
@@ -74,6 +76,10 @@
 }
 
 .art-wrap { width: 100%; max-width: 380px; margin: 0 auto 28px; }
+/* Two-pane layout: the sticky player must fit the window, so art yields first. */
+@media (min-width: 900px) {
+  .art-wrap { max-width: min(380px, calc(100dvh - 580px)); min-width: 160px; margin-bottom: 20px; }
+}
 .art {
   aspect-ratio: 1;
   clip-path: url(#art-clip);
@@ -120,10 +126,11 @@
 }
 .volume .slider { flex: 1; }
 
-/* Phones: the large controls must still fit a 360px-wide screen. */
-@media (max-width: 420px) {
+/* Phones: narrow, tall skip buttons (as on Android) so the controls fit 360px. */
+@media (max-width: 480px) {
+  .remote { padding-inline: 12px; }
   .player { padding: 20px 16px; border-radius: var(--md-shape-xl-increased); }
-  .transport .icon-btn.size-l { --size: 72px; --icon: 28px; }
+  .transport .icon-btn.size-l { --size: 80px; --width: 56px; --icon: 28px; }
   .transport .icon-btn.size-xl.wide { --size: 96px; --width: 136px; --icon: 36px; }
 }
 

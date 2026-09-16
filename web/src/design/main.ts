@@ -48,7 +48,16 @@ const square = roundedSquare(0.3);
 const cookie9 = cookie(9);
 let shapeProgress = 1;
 let rotation = 0;
-const redrawClip = () => clipPath.setAttribute('d', morphPath(square, cookie9, shapeProgress, rotation));
+// The clip stays unrotated and the container turns instead (as on Android, which
+// rotates the whole layer). Rotating the path inside a fixed box would let the box
+// slice off the square's corners whenever playback paused at an angle.
+const redrawClip = () => clipPath.setAttribute('d', morphPath(square, cookie9, shapeProgress));
+const applyRotation = () => {
+  artCanvasHost.style.transform = `rotate(${rotation}deg)`;
+  // Counter-rotate the artwork so only the outline turns; 1.2x keeps corners covered.
+  const cover = artCanvasHost.firstElementChild as HTMLElement | null;
+  if (cover) cover.style.transform = `rotate(${-rotation}deg) scale(1.2)`;
+};
 const shape = new SpringValue(1, springs.spatialSlow, (v) => {
   shapeProgress = v;
   redrawClip();
@@ -59,7 +68,7 @@ let lastFrame = performance.now();
 const spin = (now: number) => {
   if (state.playing) rotation = (rotation + ((now - lastFrame) / 24_000) * 360) % 360;
   lastFrame = now;
-  redrawClip();
+  applyRotation();
   requestAnimationFrame(spin);
 };
 requestAnimationFrame(spin);
@@ -167,6 +176,7 @@ function renderTime() {
 function render() {
   const cover = state.art === 'sunset' ? sunset() : state.art === 'ocean' ? ocean() : null;
   artCanvasHost.replaceChildren(cover ?? h('div', { class: 'art-empty' }, icon('music_note')));
+  applyRotation();
   applyScheme((cover && seedFromImage(cover)) ?? BRAND_SEED, state.dark);
 
   const track = TRACKS[state.art];
