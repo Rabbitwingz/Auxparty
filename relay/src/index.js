@@ -10,13 +10,25 @@ const COMMANDS_PER_WINDOW = 20;
 const COMMAND_WINDOW_MS = 10_000;
 const PAIR_FAILURES_PER_WINDOW = 10;
 const PAIR_FAILURE_WINDOW_MS = 10 * 60_000;
+const MAX_GUESTS = 50;
+const GUEST_NAME_MAX = 24;
+const JOINS_PER_WINDOW = 10; // per IP, successful or not
+const JOIN_WINDOW_MS = 10 * 60_000;
+const MAX_QUEUE_BYTES = 128 * 1024;
 
 const DEVICE_ID = /^[a-z0-9]{20,40}$/;
 const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // no 0/O, 1/I/L
-const ACTIONS = new Set([
-  'play', 'pause', 'playPause', 'next', 'previous',
-  'seek', 'volume', 'playVideo', 'playPlaylist', 'search',
-]);
+const QUEUE_ACTIONS = ['queue.add', 'queue.remove', 'queue.move', 'queue.clear'];
+// What each kind of socket may ask the phone to do. Linked browsers ("clients")
+// are full remotes; party guests can only search and request songs. The phone
+// enforces finer rules itself, e.g. a guest may only remove their own request.
+const ACTIONS = {
+  client: new Set([
+    'play', 'pause', 'playPause', 'next', 'previous',
+    'seek', 'volume', 'playVideo', 'playPlaylist', 'search', ...QUEUE_ACTIONS,
+  ]),
+  guest: new Set(['search', 'queue.add', 'queue.remove']),
+};
 
 // ------------------------------------------------------------------ worker
 
@@ -29,6 +41,10 @@ export default {
 
     if (url.pathname === '/v1/pair' && request.method === 'POST') {
       return withCors(await pair(request, env));
+    }
+
+    if (url.pathname === '/v1/party/join' && request.method === 'POST') {
+      return withCors(await joinParty(request, env));
     }
 
     if (url.pathname === '/v1/ws') {
@@ -65,6 +81,27 @@ async function pair(request, env) {
   return json({ deviceId: outcome.deviceId, ...issued });
 }
 
+async function joinParty(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'bad_request' }, 400);
+  }
+  const deviceId = String(body?.deviceId ?? '');
+  const name = guestName(body?.name);
+  if (!DEVICE_ID.test(deviceId)) return json({ error: 'invalid_link' }, 404);
+  if (!name) return json({ error: 'name_required' }, 400);
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+
+  const outcome = await room(env, deviceId).joinParty(String(body?.secret ?? ''), name, ip);
+  if (outcome.error) {
+    const status = { rate_limited: 429, party_full: 409 }[outcome.error] ?? 404;
+    return json({ error: outcome.error }, status);
+  }
+  return json({ deviceId, ...outcome });
+}
+
 const room = (env, deviceId) => env.ROOMS.get(env.ROOMS.idFromName(deviceId));
 // One global registry keeps code lookup strongly consistent. It holds only
 // short-lived codes, so it is small; shard by code prefix if it ever gets hot.
@@ -85,6 +122,7 @@ export class Room extends DurableObject {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.commandBuckets = new Map(); // in-memory; resetting on eviction is fine
     this.lastPairCreateAt = 0;
+    this.joinBuckets = new Map(); // ip -> { start, count }
   }
 
   async fetch(request) {
@@ -114,6 +152,28 @@ export class Room extends DurableObject {
     return { clientId, token };
   }
 
+  /** Called by the worker when someone opens a party link and enters a name. */
+  async joinParty(secret, name, ip) {
+    const now = Date.now();
+    const bucket = this.joinBuckets.get(ip);
+    if (!bucket || now - bucket.start >= JOIN_WINDOW_MS) this.joinBuckets.set(ip, { start: now, count: 1 });
+    else if (++bucket.count > JOINS_PER_WINDOW) return { error: 'rate_limited' };
+
+    const party = await this.ctx.storage.get('party');
+    if (!party || !constantTimeEqual(party.secret, secret)) return { error: 'invalid_link' };
+
+    const guests = await this.guests();
+    if (Object.keys(guests).length >= MAX_GUESTS) return { error: 'party_full' };
+
+    const guestId = `g${randomId()}`;
+    const token = randomSecret();
+    guests[guestId] = { tokenHash: await sha256(token), name, joinedAt: now, lastSeenAt: null };
+    await this.ctx.storage.put('guests', guests);
+    this.toDevice({ type: 'guests', guests: publicGuests(guests) });
+    this.broadcastParty(party, guests);
+    return { guestId, token, name };
+  }
+
   async webSocketMessage(ws, message) {
     if (typeof message !== 'string') return safeClose(ws, 1003, 'Text frames only');
     if (message.length > MAX_MESSAGE_BYTES) return safeClose(ws, 1009, 'Message too large');
@@ -139,7 +199,7 @@ export class Room extends DurableObject {
     safeClose(ws, sendable ? code : 1000, sendable ? reason : '');
     const att = ws.deserializeAttachment() ?? {};
     if (att.role === 'device' && !this.deviceSocket(ws)) {
-      this.toClients({ type: 'presence', deviceOnline: false });
+      this.toClients({ type: 'presence', deviceOnline: false }, { guests: true });
     }
   }
 
@@ -180,9 +240,21 @@ export class Room extends DurableObject {
           safeClose(other, 4000, 'Replaced by a newer connection');
         }
       }
+      // Lets browsers tell an up-to-date phone from one that can't run a party.
+      const features = Array.isArray(msg.features)
+        ? msg.features.filter((f) => typeof f === 'string').slice(0, 20).map((f) => f.slice(0, 40))
+        : [];
+      await this.ctx.storage.put('features', features);
+
       ws.serializeAttachment({ role: 'device' });
-      send(ws, { type: 'ready', clients: publicClients(await this.clients()) });
-      this.toClients({ type: 'presence', deviceOnline: true });
+      const { party = null, guests = {} } = Object.fromEntries(await this.ctx.storage.get(['party', 'guests']));
+      send(ws, {
+        type: 'ready',
+        clients: publicClients(await this.clients()),
+        party: partyView(party, guests, true),
+        guests: publicGuests(guests),
+      });
+      this.toClients({ type: 'presence', deviceOnline: true, features }, { guests: true });
       return;
     }
 
@@ -196,9 +268,25 @@ export class Room extends DurableObject {
       entry.lastSeenAt = Date.now();
       await this.ctx.storage.put('clients', clients);
 
-      ws.serializeAttachment({ role: 'client', clientId });
-      const { state = null, artwork = null } = Object.fromEntries(await this.ctx.storage.get(['state', 'artwork']));
-      send(ws, { type: 'ready', deviceOnline: !!this.deviceSocket(), state, artwork });
+      ws.serializeAttachment({ role: 'client', clientId, name: entry.name });
+      send(ws, { type: 'ready', role: 'client', ...(await this.snapshotFor(true)) });
+      return;
+    }
+
+    if (msg.role === 'guest') {
+      const guestId = String(msg.guestId ?? '');
+      const guests = await this.guests();
+      const entry = guests[guestId];
+      if (!entry || !constantTimeEqual(entry.tokenHash, await sha256(String(msg.token ?? '')))) {
+        // Tell "the party is over" apart from a bad token so the page can say so.
+        const partyOver = !entry && !(await this.ctx.storage.get('party'));
+        return partyOver ? safeClose(ws, 4004, 'Party ended') : safeClose(ws, 4001, 'Unauthorized');
+      }
+      entry.lastSeenAt = Date.now();
+      await this.ctx.storage.put('guests', guests);
+
+      ws.serializeAttachment({ role: 'guest', clientId: guestId, name: entry.name });
+      send(ws, { type: 'ready', role: 'guest', guestId, name: entry.name, ...(await this.snapshotFor(false)) });
       return;
     }
 
@@ -212,7 +300,11 @@ export class Room extends DurableObject {
     const id = String(msg.id ?? '').slice(0, 40);
     const reply = (error) => send(ws, { type: 'result', id, ok: false, error });
 
-    if (!ACTIONS.has(msg.action)) return reply('unknown_action');
+    const allowed = ACTIONS[att.role];
+    if (!allowed?.has(msg.action)) {
+      const known = ACTIONS.client.has(msg.action);
+      return reply(known ? 'forbidden' : 'unknown_action');
+    }
     if (!this.allowCommand(att.clientId)) return reply('rate_limited');
 
     const device = this.deviceSocket();
@@ -220,11 +312,14 @@ export class Room extends DurableObject {
 
     // Encode the sender in the id so results route back statelessly —
     // nothing to lose if the room hibernates between command and result.
+    // `from` is set here, never taken from the browser, so nobody can request
+    // songs (or remove them) in someone else's name.
     send(device, {
       type: 'cmd',
       id: `${att.clientId}|${id}`,
       action: msg.action,
       args: msg.args && typeof msg.args === 'object' ? msg.args : {},
+      from: { id: att.clientId, name: att.name ?? null, role: att.role },
     });
   }
 
@@ -232,13 +327,78 @@ export class Room extends DurableObject {
     switch (msg.type) {
       case 'state':
         await this.ctx.storage.put('state', msg.state ?? null);
-        this.toClients({ type: 'state', state: msg.state ?? null });
+        this.toClients({ type: 'state', state: msg.state ?? null }, { guests: true });
         return;
 
       case 'artwork':
         await this.ctx.storage.put('artwork', msg.artwork ?? null);
-        this.toClients({ type: 'artwork', artwork: msg.artwork ?? null });
+        this.toClients({ type: 'artwork', artwork: msg.artwork ?? null }, { guests: true });
         return;
+
+      case 'queue': {
+        // The phone owns the queue; the relay only caches and fans it out.
+        const queue = msg.queue && typeof msg.queue === 'object' ? msg.queue : null;
+        if (queue && JSON.stringify(queue).length > MAX_QUEUE_BYTES) {
+          send(ws, { type: 'error', error: 'queue_too_large' });
+          return;
+        }
+        await this.ctx.storage.put('queue', queue);
+        this.toClients({ type: 'queue', queue }, { guests: true });
+        return;
+      }
+
+      case 'party.start': {
+        // Idempotent: starting a running party just re-sends it.
+        let party = await this.ctx.storage.get('party');
+        if (!party) {
+          party = { secret: randomSecret(), startedAt: Date.now() };
+          await this.ctx.storage.put('party', party);
+        }
+        const guests = await this.guests();
+        this.broadcastParty(party, guests);
+        send(ws, { type: 'guests', guests: publicGuests(guests) });
+        return;
+      }
+
+      case 'party.newLink': {
+        const party = await this.ctx.storage.get('party');
+        if (!party) {
+          send(ws, { type: 'party', party: partyView(null, {}, true) });
+          return;
+        }
+        party.secret = randomSecret(); // old link stops working; guests stay
+        await this.ctx.storage.put('party', party);
+        this.broadcastParty(party, await this.guests());
+        return;
+      }
+
+      case 'party.end': {
+        await this.ctx.storage.delete(['party', 'guests', 'queue']);
+        for (const guest of this.ctx.getWebSockets()) {
+          if (guest.deserializeAttachment()?.role === 'guest') safeClose(guest, 4004, 'Party ended');
+        }
+        this.broadcastParty(null, {});
+        this.toClients({ type: 'queue', queue: null });
+        send(ws, { type: 'guests', guests: [] });
+        return;
+      }
+
+      case 'guests.list':
+        send(ws, { type: 'guests', guests: publicGuests(await this.guests()) });
+        return;
+
+      case 'guests.remove': {
+        const guestId = String(msg.guestId ?? '');
+        const guests = await this.guests();
+        if (guests[guestId]) {
+          delete guests[guestId];
+          await this.ctx.storage.put('guests', guests);
+          for (const guest of this.clientSockets(guestId, 'guest')) safeClose(guest, 4003, 'Removed by the host');
+          this.broadcastParty(await this.ctx.storage.get('party'), guests);
+        }
+        send(ws, { type: 'guests', guests: publicGuests(guests) });
+        return;
+      }
 
       case 'result': {
         const raw = String(msg.id ?? '');
@@ -265,7 +425,7 @@ export class Room extends DurableObject {
         if (clients[clientId]) {
           delete clients[clientId];
           await this.ctx.storage.put('clients', clients);
-          for (const client of this.clientSockets(clientId)) safeClose(client, 4003, 'Revoked');
+          for (const client of this.clientSockets(clientId, 'client')) safeClose(client, 4003, 'Revoked');
         }
         send(ws, { type: 'clients', clients: publicClients(clients) });
         return;
@@ -305,16 +465,47 @@ export class Room extends DurableObject {
     return (await this.ctx.storage.get('clients')) ?? {};
   }
 
+  async guests() {
+    return (await this.ctx.storage.get('guests')) ?? {};
+  }
+
+  /** What a browser needs to render immediately after connecting. */
+  async snapshotFor(isRemote) {
+    const stored = Object.fromEntries(await this.ctx.storage.get(['state', 'artwork', 'queue', 'party', 'guests', 'features']));
+    return {
+      deviceOnline: !!this.deviceSocket(),
+      features: stored.features ?? [],
+      state: stored.state ?? null,
+      artwork: stored.artwork ?? null,
+      queue: stored.queue ?? null,
+      party: partyView(stored.party ?? null, stored.guests ?? {}, isRemote),
+    };
+  }
+
+  /** Remotes and the phone get the link secret so they can share it; guests don't. */
+  broadcastParty(party, guests) {
+    const full = { type: 'party', party: partyView(party, guests, true) };
+    const limited = { type: 'party', party: partyView(party, guests, false) };
+    this.toDevice(full);
+    for (const ws of this.ctx.getWebSockets()) {
+      const role = ws.deserializeAttachment()?.role;
+      if (role === 'client') send(ws, full);
+      else if (role === 'guest') send(ws, limited);
+    }
+  }
+
   deviceSocket(exclude) {
     return this.ctx.getWebSockets().find((ws) =>
       ws !== exclude && ws.readyState === WebSocket.READY_STATE_OPEN &&
       ws.deserializeAttachment()?.role === 'device');
   }
 
-  clientSockets(clientId) {
+  /** Browser sockets: linked remotes, party guests, or both (role omitted). */
+  clientSockets(clientId, role) {
     return this.ctx.getWebSockets().filter((ws) => {
       const att = ws.deserializeAttachment();
-      return att?.role === 'client' && (clientId == null || att.clientId === clientId);
+      const browser = role ? att?.role === role : att?.role === 'client' || att?.role === 'guest';
+      return browser && (clientId == null || att.clientId === clientId);
     });
   }
 
@@ -323,8 +514,8 @@ export class Room extends DurableObject {
     if (device) send(device, message);
   }
 
-  toClients(message) {
-    for (const ws of this.clientSockets()) send(ws, message);
+  toClients(message, { guests = false } = {}) {
+    for (const ws of this.clientSockets(null, guests ? null : 'client')) send(ws, message);
   }
 
   allowCommand(clientId) {
@@ -412,6 +603,28 @@ function publicClients(clients) {
   return Object.entries(clients).map(([clientId, c]) => ({
     clientId, name: c.name, createdAt: c.createdAt, lastSeenAt: c.lastSeenAt,
   }));
+}
+
+function publicGuests(guests) {
+  return Object.entries(guests).map(([guestId, g]) => ({
+    guestId, name: g.name, joinedAt: g.joinedAt, lastSeenAt: g.lastSeenAt,
+  }));
+}
+
+function partyView(party, guests, includeSecret) {
+  if (!party) return { active: false };
+  const view = { active: true, startedAt: party.startedAt, guestCount: Object.keys(guests).length };
+  if (includeSecret) view.secret = party.secret;
+  return view;
+}
+
+/** Display names shown next to requests: printable, collapsed whitespace, short. */
+export function guestName(input) {
+  const name = String(input ?? '')
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [...name].slice(0, GUEST_NAME_MAX).join('').trim() || null;
 }
 
 export function normalizeCode(input) {

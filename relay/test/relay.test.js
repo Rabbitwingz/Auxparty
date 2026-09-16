@@ -331,6 +331,229 @@ test('each client is rate limited on commands', async () => {
   client.close(); dev.close();
 });
 
+// ------------------------------------------------------------------ party
+
+const postJoin = (body) => fetch(`${HTTP}/v1/party/join`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+async function startParty(dev) {
+  dev.send({ type: 'party.start' });
+  const { party } = await dev.next('party');
+  await dev.next('guests');
+  return party;
+}
+
+async function joinGuest(deviceId, secret, name = 'Sam') {
+  const res = await postJoin({ deviceId, secret, name });
+  assert.equal(res.status, 200, 'joining should succeed');
+  return res.json();
+}
+
+async function connectGuest(deviceId, guestId, token) {
+  const sock = open(deviceId);
+  await sock.opened;
+  sock.send({ type: 'auth', role: 'guest', guestId, token });
+  return sock;
+}
+
+test('party: start is idempotent and the link lets guests join by name', async () => {
+  const device = newDevice();
+  const { sock: dev, ready } = await connectDevice(device);
+  assert.deepEqual(ready.party, { active: false });
+
+  const party = await startParty(dev);
+  assert.equal(party.active, true);
+  assert.match(party.secret, /^[\w-]{40,}$/);
+  assert.equal(party.guestCount, 0);
+  assert.equal((await startParty(dev)).secret, party.secret, 'starting again keeps the same link');
+
+  assert.equal((await postJoin({ deviceId: device.id, secret: 'wrong', name: 'Sam' })).status, 404);
+  assert.equal((await postJoin({ deviceId: device.id, secret: party.secret, name: '  \u0000 ' })).status, 400);
+
+  const joined = await joinGuest(device.id, party.secret, '  Sam\u200b   the   DJ with a very long name indeed ');
+  assert.equal(joined.deviceId, device.id);
+  assert.match(joined.guestId, /^g[a-z2-7]{26}$/);
+  assert.equal(joined.name, 'Sam the DJ with a very l');
+  const { guests } = await dev.next('guests');
+  assert.equal(guests.length, 1);
+  assert.ok(!('tokenHash' in guests[0]));
+  assert.equal((await dev.next('party')).party.guestCount, 1);
+
+  const guest = await connectGuest(device.id, joined.guestId, joined.token);
+  const guestReady = await guest.next('ready');
+  assert.equal(guestReady.role, 'guest');
+  assert.equal(guestReady.name, joined.name);
+  assert.equal(guestReady.party.active, true);
+  assert.ok(!('secret' in guestReady.party), 'guests never receive the link secret');
+
+  const forged = await connectGuest(device.id, joined.guestId, 'nope');
+  assert.equal((await forged.closed).code, 4001);
+
+  guest.close(); dev.close();
+});
+
+test('party: guests may only search and request; the relay stamps who asked', async () => {
+  const device = newDevice();
+  const { sock: dev } = await connectDevice(device);
+  const party = await startParty(dev);
+  const joined = await joinGuest(device.id, party.secret, 'Priya');
+  const guest = await connectGuest(device.id, joined.guestId, joined.token);
+  await guest.next('ready');
+
+  for (const action of ['next', 'playVideo', 'volume', 'queue.clear', 'queue.move']) {
+    guest.send({ type: 'cmd', id: action, action });
+    const result = await guest.next('result');
+    assert.equal(result.error, 'forbidden', action);
+  }
+  await assert.rejects(dev.next('cmd', 500), /timed out/, 'forbidden commands never reach the phone');
+
+  guest.send({ type: 'cmd', id: 'a1', action: 'queue.add', args: { videoId: 'RvegizX3GqY' }, from: { id: 'someone-else', name: 'Host' } });
+  const cmd = await dev.next('cmd');
+  assert.equal(cmd.action, 'queue.add');
+  assert.deepEqual(cmd.from, { id: joined.guestId, name: 'Priya', role: 'guest' });
+
+  dev.send({ type: 'result', id: cmd.id, ok: true, data: { position: 1 } });
+  assert.deepEqual(await guest.next('result'), { type: 'result', id: 'a1', ok: true, data: { position: 1 } });
+
+  guest.close(); dev.close();
+});
+
+test('party: remotes keep full control and see the link; queue is cached for everyone', async () => {
+  const device = newDevice();
+  const { sock: dev } = await connectDevice(device);
+  const { clientId, token } = await pairClient(dev, 'PC');
+  const remote = await connectClient(device.id, clientId, token);
+  assert.deepEqual((await remote.next('ready')).party, { active: false });
+
+  const party = await startParty(dev);
+  assert.equal((await remote.next('party')).party.secret, party.secret);
+
+  remote.send({ type: 'cmd', id: 'm', action: 'queue.move', args: { itemId: 'x', toIndex: 0 } });
+  const cmd = await dev.next('cmd');
+  assert.deepEqual(cmd.from, { id: clientId, name: 'PC', role: 'client' });
+
+  const joined = await joinGuest(device.id, party.secret);
+  const guest = await connectGuest(device.id, joined.guestId, joined.token);
+  await guest.next('ready');
+
+  const queue = { items: [{ itemId: 'i1', videoId: 'RvegizX3GqY', title: 'Numb', requestedBy: [{ id: joined.guestId, name: 'Sam' }] }] };
+  dev.send({ type: 'queue', queue });
+  assert.deepEqual((await remote.next('queue')).queue, queue);
+  assert.deepEqual((await guest.next('queue')).queue, queue);
+
+  const late = await connectGuest(device.id, joined.guestId, joined.token);
+  const lateReady = await late.next('ready');
+  assert.deepEqual(lateReady.queue, queue);
+  assert.equal(lateReady.party.guestCount, 1);
+
+  dev.send({ type: 'queue', queue: { items: [{ blob: 'x'.repeat(130 * 1024) }] } });
+  assert.equal((await dev.next('error')).error, 'queue_too_large');
+
+  remote.close(); guest.close(); late.close(); dev.close();
+});
+
+test('party: guests see presence and state; features reach browsers', async () => {
+  const device = newDevice();
+  const first = await connectDevice(device);
+  const party = await startParty(first.sock);
+  const joined = await joinGuest(device.id, party.secret);
+  first.sock.close();
+  await first.sock.closed;
+
+  const guest = await connectGuest(device.id, joined.guestId, joined.token);
+  assert.equal((await guest.next('ready')).deviceOnline, false);
+
+  const dev = open(device.id);
+  await dev.opened;
+  dev.send({ type: 'auth', role: 'device', secret: device.secret, features: ['queue', 42] });
+  const ready = await dev.next('ready');
+  assert.equal(ready.party.secret, party.secret, 'the phone gets its party back after reconnecting');
+  assert.equal(ready.guests.length, 1);
+  assert.deepEqual(await guest.next('presence'), { type: 'presence', deviceOnline: true, features: ['queue'] });
+
+  dev.send({ type: 'state', state: { title: 'Numb' } });
+  assert.equal((await guest.next('state')).state.title, 'Numb');
+
+  guest.close(); dev.close();
+});
+
+test('party: new link stops the old one but keeps guests', async () => {
+  const device = newDevice();
+  const { sock: dev } = await connectDevice(device);
+  const party = await startParty(dev);
+  const joined = await joinGuest(device.id, party.secret);
+  await dev.next('party');
+  const guest = await connectGuest(device.id, joined.guestId, joined.token);
+  await guest.next('ready');
+
+  dev.send({ type: 'party.newLink' });
+  const renewed = (await dev.next('party')).party;
+  assert.notEqual(renewed.secret, party.secret);
+  assert.equal((await postJoin({ deviceId: device.id, secret: party.secret, name: 'Late' })).status, 404);
+  await joinGuest(device.id, renewed.secret, 'Late');
+  assert.equal((await guest.next('party')).party.active, true);
+
+  guest.send({ type: 'cmd', id: 's', action: 'search', args: { query: 'numb' } });
+  assert.equal((await dev.next('cmd')).action, 'search');
+
+  guest.close(); dev.close();
+});
+
+test('party: removing a guest disconnects them; ending the party clears everything', async () => {
+  const device = newDevice();
+  const { sock: dev } = await connectDevice(device);
+  const { clientId, token } = await pairClient(dev);
+  await dev.next('clients');
+  const remote = await connectClient(device.id, clientId, token);
+  await remote.next('ready');
+
+  const party = await startParty(dev);
+  const a = await joinGuest(device.id, party.secret, 'A');
+  const b = await joinGuest(device.id, party.secret, 'B');
+  const guestA = await connectGuest(device.id, a.guestId, a.token);
+  const guestB = await connectGuest(device.id, b.guestId, b.token);
+  await guestA.next('ready');
+  await guestB.next('ready');
+  dev.send({ type: 'queue', queue: { items: [{ itemId: 'i1' }] } });
+  await remote.next('queue');
+
+  dev.send({ type: 'guests.remove', guestId: a.guestId });
+  assert.equal((await guestA.closed).code, 4003);
+  let guests;
+  do ({ guests } = await dev.next('guests')); while (guests.some((g) => g.name === 'A'));
+  assert.equal(guests[0].name, 'B');
+  assert.equal((await connectGuest(device.id, a.guestId, a.token).then((s) => s.closed)).code, 4001);
+
+  dev.send({ type: 'party.end' });
+  assert.equal((await guestB.closed).code, 4004);
+  let view;
+  do ({ party: view } = await remote.next('party')); while (view.active);
+  assert.deepEqual(view, { active: false });
+  assert.equal((await remote.next('queue')).queue, null);
+  assert.equal((await connectGuest(device.id, b.guestId, b.token).then((s) => s.closed)).code, 4004);
+  assert.equal((await postJoin({ deviceId: device.id, secret: party.secret, name: 'C' })).status, 404);
+
+  // Remotes are untouched by the party ending.
+  remote.send({ type: 'cmd', id: 'n', action: 'next' });
+  assert.equal((await dev.next('cmd')).action, 'next');
+
+  remote.close(); dev.close();
+});
+
+test('party: joins are limited per network and per party size', async () => {
+  const device = newDevice();
+  const { sock: dev } = await connectDevice(device);
+  const party = await startParty(dev);
+  const statuses = [];
+  for (let i = 0; i < 12; i++) statuses.push((await postJoin({ deviceId: device.id, secret: party.secret, name: `G${i}` })).status);
+  assert.deepEqual(statuses.slice(0, 10), Array(10).fill(200));
+  assert.equal(statuses.at(-1), 429);
+  dev.close();
+});
+
 // Last: it rate-limits this IP for every later pairing attempt.
 test('guessing pairing codes gets rate limited', async () => {
   const statuses = [];

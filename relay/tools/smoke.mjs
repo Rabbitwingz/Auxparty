@@ -101,6 +101,35 @@ await step('command round trip', async () => {
   return `${Date.now() - t}ms browser→phone→browser`;
 });
 
+await step('party: guest joins, may request but not skip, and is closed when it ends', async () => {
+  dev.send({ type: 'party.start' });
+  const { party } = await dev.next('party');
+  const r = await fetch(`${RELAY}/v1/party/join`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId: device.id, secret: party.secret, name: 'smoke guest' }),
+  });
+  if (r.status !== 200) throw new Error(`join HTTP ${r.status} ${await r.text()}`);
+  const joined = await r.json();
+
+  const guest = open(device.id);
+  await guest.opened;
+  guest.send({ type: 'auth', role: 'guest', guestId: joined.guestId, token: joined.token });
+  const ready = await guest.next('ready');
+  if (ready.role !== 'guest' || 'secret' in ready.party) throw new Error(JSON.stringify(ready.party));
+
+  guest.send({ type: 'cmd', id: 'g1', action: 'next' });
+  const refused = await guest.next('result');
+  if (refused.error !== 'forbidden') throw new Error(JSON.stringify(refused));
+
+  guest.send({ type: 'cmd', id: 'g2', action: 'queue.add', args: { videoId: 'RvegizX3GqY' } });
+  const cmd = await dev.next('cmd');
+  if (cmd.from?.name !== 'smoke guest') throw new Error(JSON.stringify(cmd.from));
+
+  dev.send({ type: 'party.end' });
+  const code = await guest.closed;
+  if (code !== 4004) throw new Error(`close code ${code}`);
+});
+
 await step('revocation disconnects the browser', async () => {
   dev.send({ type: 'clients.revoke', clientId: paired.clientId });
   const code = await client.closed;
