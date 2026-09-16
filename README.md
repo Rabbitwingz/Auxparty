@@ -12,15 +12,27 @@ that controls the music locally, and browsers talk to it through a relay.
  Android app ──outbound WebSocket──►  Relay (Cloudflare)  ◄── Browser, anywhere
  • reads + controls media sessions    • one room per phone      • UI on Vercel
  • YouTube Music search, on-device    • pairing-code tokens
+ • runs the party queue               • party links for guests
 ```
+
+Two modes, switched in the app:
+
+- **Remote.** Browsers linked with a pairing code control playback, and a song
+  picked in one plays straight away.
+- **Party.** The host shares a link (or QR code). Friends open it, enter a name, and
+  request songs into a queue everyone can see. The phone plays requests in order,
+  starting the next one as each song ends. Guests can take back their own
+  requests; the host, and linked browsers, can remove, reorder or skip any.
+  YouTube Music has no queue API, so the queue lives on the phone (see
+  `android/…/party/`), and the relay only caches it for browsers.
 
 ## Repository
 
 | Path | What | Status |
 | --- | --- | --- |
-| `android/` | Companion app (Kotlin; OkHttp is the only dependency) | Relay client, pairing, diagnostics |
-| `relay/` | Cloudflare Worker + Durable Objects ([protocol](relay/PROTOCOL.md)) | Built, 17 integration tests |
-| `web/` | Static browser UI for Vercel, no build step | Built, verified end to end locally |
+| `android/` | Companion app (Kotlin, Compose, Material 3 Expressive) | Remote and party modes |
+| `relay/` | Cloudflare Worker + Durable Objects ([protocol](relay/PROTOCOL.md)) | Deployed, 24 integration tests |
+| `web/` | Browser UI for Vercel (Vite + TypeScript, no framework) | Deployed from `main` |
 | `local-adb/` | Original PC-only version driving the phone over ADB | Working; superseded |
 
 ## Design decisions
@@ -41,13 +53,15 @@ Run the whole system without a phone. `relay/tools/fake-phone.mjs` speaks the
 device side of the protocol, with real YouTube Music search results:
 
 ```
-npm --prefix relay install
+npm --prefix relay install && npm --prefix web install
 npm --prefix relay run dev -- --port 8787     # relay
-node web/dev-server.mjs 5173                  # web UI
-node relay/tools/fake-phone.mjs               # prints a pairing code
+npm --prefix web run dev                      # web UI on :5173
+node relay/tools/fake-phone.mjs --party --song-seconds=60   # prints a pairing code and a party link
 ```
 
-Then open `http://127.0.0.1:5173/?relay=http://127.0.0.1:8787` and enter the code.
+Open `http://127.0.0.1:5173/?relay=http://127.0.0.1:8787` once so the site uses the
+local relay, then enter the code (remote) or open the party link (guest). Use a
+different origin, e.g. `localhost` vs `127.0.0.1`, to be a remote and a guest at once.
 Relay tests: `npm --prefix relay test`.
 
 ## Building the app
