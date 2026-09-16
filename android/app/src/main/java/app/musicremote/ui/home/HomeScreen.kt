@@ -1,5 +1,11 @@
 package app.musicremote.ui.home
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -33,10 +40,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.WavyProgressIndicatorDefaults
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.musicremote.ui.components.MorphingArtwork
@@ -103,11 +114,16 @@ fun HomeScreen(state: HomeUiState, actions: HomeActions = HomeActions()) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val np = state.nowPlaying
-            MorphingArtwork(
-                artwork = np?.artwork,
-                playing = np?.playing == true,
-                modifier = Modifier.widthIn(max = 360.dp),
-            )
+            if (np == null) {
+                Spacer(Modifier.height(32.dp))
+                EmptyArtwork()
+            } else {
+                MorphingArtwork(
+                    artwork = np.artwork,
+                    playing = np.playing,
+                    modifier = Modifier.widthIn(max = 360.dp),
+                )
+            }
             Spacer(Modifier.height(28.dp))
 
             if (np == null) {
@@ -198,13 +214,14 @@ private fun TrackDetails(np: NowPlayingUi) {
 private fun Transport(np: NowPlayingUi, actions: HomeActions) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FilledTonalIconButton(
             onClick = actions.onPrevious,
             shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(IconButtonDefaults.largeContainerSize()),
+            // Narrow keeps all three controls inside a 360dp-wide phone.
+            modifier = Modifier.size(IconButtonDefaults.largeContainerSize(IconButtonDefaults.IconButtonWidthOption.Narrow)),
         ) {
             Icon(AuxIcons.SkipPrevious, "Previous", Modifier.size(IconButtonDefaults.largeIconSize))
         }
@@ -227,7 +244,8 @@ private fun Transport(np: NowPlayingUi, actions: HomeActions) {
         FilledTonalIconButton(
             onClick = actions.onNext,
             shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(IconButtonDefaults.largeContainerSize()),
+            // Narrow keeps all three controls inside a 360dp-wide phone.
+            modifier = Modifier.size(IconButtonDefaults.largeContainerSize(IconButtonDefaults.IconButtonWidthOption.Narrow)),
         ) {
             Icon(AuxIcons.SkipNext, "Next", Modifier.size(IconButtonDefaults.largeIconSize))
         }
@@ -248,6 +266,33 @@ private fun VolumeRow(np: NowPlayingUi, actions: HomeActions) {
     }
 }
 
+/** A small soft-burst that turns slowly: present, but not competing with the call to action. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun EmptyArtwork() {
+    val turn = rememberInfiniteTransition(label = "empty artwork")
+    val rotation by turn.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(40_000, easing = LinearEasing)),
+        label = "rotation",
+    )
+    Box(
+        modifier = Modifier
+            .size(168.dp)
+            .graphicsLayer { rotationZ = rotation }
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialShapes.SoftBurst.toShape()),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            AuxIcons.MusicNote,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = -rotation },
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun NothingPlaying() {
@@ -258,6 +303,7 @@ private fun NothingPlaying() {
             "Start a song in YouTube Music, or invite a friend to pick one.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }
