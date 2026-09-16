@@ -1,7 +1,7 @@
 # Music Remote
 
 Spotify-Connect-style remote control for YouTube Music (and Plex) on Android.
-Pick and control music from any browser, anywhere, while the phone stays the
+Open **https://ytmbridge.vercel.app** to pick and control music from any browser, anywhere, while the phone stays the
 thing actually playing it: its Bluetooth, its EQ, its speakers.
 
 YouTube Music has no remote-control feature of its own, and Google Cast only
